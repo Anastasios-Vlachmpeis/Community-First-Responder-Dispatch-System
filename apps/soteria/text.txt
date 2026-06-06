@@ -1,0 +1,120 @@
+You are building the Responder Registration web application for project **Soteria** — a civic emergency response platform that connects nearby certified volunteers ("responders") with incidents in real time.
+
+Read @AGENTS.md before doing anything. Follow all conventions defined there.
+
+---
+
+## Context
+
+Soteria routes emergency incidents (fires, medical events, accidents) detected from government systems to a dashboard used by police/fire operators. Operators see a live map of sent units and nearby volunteer responders. This app handles the **registration and credential validation of those volunteer responders**.
+
+The app lives at: `apps/soteria/`
+
+---
+
+## Core UX Principle
+
+> **Zero typing wherever possible.** The entire flow must be completable without a keyboard on mobile. Every field that can be auto-filled, selected, or tapped must be.
+
+---
+
+## Registration Flow (6 steps)
+
+### Step 1 — Face Capture (`/register/face`)
+- Show a live camera feed centered on screen.
+- Overlay an oval face-guide outline so the user knows where to position their face.
+- Single large "Capture" button. On capture, show a preview with "Retake" / "Looks good →" options.
+- Store captured face image in session state.
+- Display copy: *"We'll use this photo to verify your identity. It stays private and is never shared."*
+
+### Step 2 — ID Card Scan (`/register/id-scan`)
+- Prompt: *"Place your government ID on a flat surface and take a photo."*
+- Camera feed with a rectangular document-guide overlay (aspect ratio ~1.586, like a card).
+- On capture, immediately run Tesseract.js OCR in a Web Worker on the captured image.
+- Show a loading skeleton/spinner with message: *"Reading your ID…"*
+- Parse OCR output for the following fields using regex heuristics:
+  - `firstName`, `lastName`, `dateOfBirth` (DD/MM/YYYY or MM/DD/YYYY), `idNumber`, `address` (if present on card)
+- Populate the form state with parsed values.
+- Also store the raw ID card image in session state.
+
+### Step 3 — Review & Confirm Info (`/register/review`)
+- Display parsed fields in an editable card layout.
+- Each field is shown as a read-only chip by default; tapping it reveals an inline text input for correction.
+- Fields: First Name, Last Name, Date of Birth, ID Number, Address (street, city, postal code, country — split into sub-fields).
+- "Confirm & Continue →" button — disabled until all required fields are non-empty.
+- No full-page form; keep it conversational and compact.
+
+### Step 4 — Certifications (`/register/certifications`)
+- Heading: *"What are your qualifications?"*
+- Multi-select grid of certification cards (large tap targets, icon + label). Include at minimum:
+  - 🫀 CPR / AED Certified
+  - 🩺 Medical Professional (Doctor / Nurse / Paramedic)
+  - 🌊 Water Rescue
+  - 🏔️ Mountain / Wilderness Rescue
+  - 🔥 Fire Safety / First Responder
+  - 🚗 Road Traffic Accident Response
+  - 🧠 Mental Health First Aid
+  - ➕ Other (reveals a free-text input for label only)
+- At least one selection required to proceed.
+- Selected cards get a filled highlight style (brand color).
+
+### Step 5 — Upload Credential Documents (`/register/documents`)
+- For each certification selected in Step 4, render an upload card.
+- Each card shows the cert name, an upload zone (tap to open file picker or camera), and a thumbnail preview once uploaded.
+- Accepted formats: JPG, PNG, PDF (max 10 MB each).
+- "Other" cert: also show a small text input for the cert name before the upload zone.
+- "Submit Application →" button — enabled only when every cert has at least one document uploaded.
+
+### Step 6 — Confirmation (`/register/confirmation`)
+- Full-screen success state.
+- Show: applicant's captured face photo (circular), their name, and a reference number (randomly generated UUID, truncated to 8 chars, prefixed `SOT-`).
+- Message: *"Your application is under review. We'll notify you once your credentials are verified — usually within 24 hours."*
+- No further action required. Optionally show a "Add to Home Screen" prompt on mobile.
+
+---
+
+## Progress Indicator
+
+- A persistent top bar across all steps showing:
+  - Soteria logo (left)
+  - Step dots or a progress bar (center) — 6 steps total
+  - Step label e.g. "Step 2 of 6 · ID Scan" (right or below bar)
+- Do not show a back button on Step 1 or Step 6.
+
+---
+
+## Shared Components to Create
+
+| Component | Purpose |
+|---|---|
+| `<CameraCapture />` | Reusable camera feed + capture + preview, accepts `guideShape: 'oval' \| 'card'` prop |
+| `<StepLayout />` | Wraps each step with the progress bar, consistent padding, and max-width |
+| `<CertCard />` | Selectable certification tile with icon, label, selected state |
+| `<UploadZone />` | Drag-and-drop + tap-to-upload zone with preview thumbnail |
+| `<FieldChip />` | Read-only display that turns into an inline input on tap |
+| `<OcrWorker />` | Web Worker wrapper for Tesseract.js |
+
+---
+
+## Visual Design
+
+- **Color palette**: Deep navy (`#0B1F3A`) primary, electric teal (`#00C2CB`) accent, white backgrounds, soft gray cards.
+- **Typography**: Inter or system-ui; headings bold, body regular.
+- **Mobile-first**: Design for 390px viewport width. Max content width 480px centered on desktop.
+- **Rounded**: All cards and buttons use `rounded-2xl`. Large buttons are full-width and at least 56px tall.
+- **Spacing**: Generous vertical rhythm — steps feel calm and uncluttered, not form-like.
+- **Transitions**: Smooth page transitions between steps (fade + slight upward slide, 200ms).
+
+---
+pay attention to @AGENTS.md
+
+---
+
+## Important Notes
+
+1. **No backend required for this task.** All data stays in `sessionStorage`. Mark any real API call locations with `// TODO: POST to /api/register`.
+2. **Camera permissions**: Handle denied permission gracefully — show a friendly error card with instructions to enable camera in browser settings.
+3. **Accessibility**: All interactive elements must have ARIA labels. Camera feeds must have a `role="img"` description.
+4. **Do not use `<form>` HTML elements** — use div-based layouts with button `onClick` handlers for submission.
+5. **OCR is best-effort**: If OCR produces low-confidence or empty results, skip auto-fill and let the user fill Step 3 manually. Show a toast: *"We couldn't read your ID automatically — please fill in your details below."*
+6. The app name in copy is **Soteria** (not Setoria — the Greek goddess of safety and salvation).

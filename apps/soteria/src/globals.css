@@ -1,1 +1,53 @@
 @import "tailwindcss";
+
+@theme {
+	--color-navy: #0b1f3a;
+	--color-teal: #00c2cb;
+	--color-card: #f5f7fa;
+	--color-muted: #6b7280;
+	--font-sans: Inter, system-ui, -apple-system, sans-serif;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-sans);
+	background: white;
+	color: var(--color-navy);
+	-webkit-font-smoothing: antialiased;
+}
+
+@keyframes step-enter {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.step-enter {
+	animation: step-enter 200ms ease-out;
+}
+
+@keyframes toast-enter {
+	from {
+		opacity: 0;
+		transform: translateY(-8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.toast-enter {
+	animation: toast-enter 200ms ease-out;
+}
