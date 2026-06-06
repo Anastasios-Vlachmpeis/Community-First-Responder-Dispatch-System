@@ -14,7 +14,7 @@ export const Toast = ({ message, onDismiss, durationMs = 5000 }: ToastProps) => 
 
 	return (
 		<div
-			className="toast-enter fixed top-20 right-4 left-4 z-50 mx-auto max-w-[480px] rounded-2xl bg-navy px-4 py-3 text-sm text-white shadow-lg"
+			className="toast-enter fixed top-20 right-4 left-4 z-50 mx-auto max-w-[480px] rounded-2xl border border-surface bg-ink px-4 py-3 text-sm text-white shadow-lg"
 			role="status"
 			aria-live="polite"
 		>

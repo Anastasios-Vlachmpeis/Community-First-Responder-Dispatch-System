@@ -6,17 +6,21 @@ type CertStatusBadgeProps = {
 
 const statusDisplay: Record<
 	CertificationStatus,
-	{ icon: string; label: string; className: string }
+	{ label: string; className: string }
 > = {
-	unverified: { icon: "🔘", label: "Unverified", className: "text-muted" },
-	verified: { icon: "✅", label: "Verified", className: "text-green-700" },
+	self_reported: { label: "Self-reported", className: "bg-surface text-ink" },
+	pending_review: { label: "Pending review", className: "bg-accent/10 text-accent" },
+	verified: { label: "Verified", className: "bg-emerald-100 text-emerald-800" },
+	rejected: { label: "Rejected", className: "bg-danger/10 text-danger" },
 };
 
 export const CertStatusBadge = ({ status }: CertStatusBadgeProps) => {
 	const display = statusDisplay[status];
 	return (
-		<span className={`text-xs font-medium ${display.className}`}>
-			<span aria-hidden="true">{display.icon}</span> {display.label}
+		<span
+			className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${display.className}`}
+		>
+			{display.label}
 		</span>
 	);
 };

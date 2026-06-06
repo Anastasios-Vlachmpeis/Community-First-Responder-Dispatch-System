@@ -1,16 +1,13 @@
+import { Camera } from "lucide-react";
 import { useRef } from "react";
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const ACCEPTED = ["image/jpeg", "image/png", "application/pdf"];
+const ACCEPTED = ["image/jpeg", "image/png"];
 
 type UploadZoneProps = {
 	label: string;
 	preview: string | null;
-	isPdf?: boolean;
-	optional?: boolean;
-	optionalLabel?: string;
-	onUpload: (dataUrl: string, isPdf: boolean) => void;
-	onSkip?: () => void;
+	onUpload: (dataUrl: string) => void;
 	onError: (message: string) => void;
 };
 
@@ -22,101 +19,61 @@ const readFile = (file: File) =>
 		reader.readAsDataURL(file);
 	});
 
-export const UploadZone = ({
-	label,
-	preview,
-	isPdf,
-	optional,
-	optionalLabel = "Add proof (optional)",
-	onUpload,
-	onSkip,
-	onError,
-}: UploadZoneProps) => {
+export const UploadZone = ({ label, preview, onUpload, onError }: UploadZoneProps) => {
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	const handleFile = async (file: File | undefined) => {
 		if (!file) return;
 		if (!ACCEPTED.includes(file.type)) {
-			onError("only JPG, PNG, and PDF files are accepted");
+			onError("only photos are accepted — photograph your certificate");
 			return;
 		}
 		if (file.size > MAX_BYTES) {
-			onError("file must be 10 MB or smaller");
+			onError("photo must be 10 MB or smaller");
 			return;
 		}
 		try {
-			onUpload(await readFile(file), file.type === "application/pdf");
+			onUpload(await readFile(file));
 		} catch {
-			onError("failed to read file");
+			onError("failed to read photo");
 		}
 	};
 
 	return (
-		<div className={`rounded-2xl p-4 ${optional ? "bg-white" : "bg-card"}`}>
-			<div className="mb-3 flex items-center justify-between">
-				<p className={`text-sm font-medium ${optional ? "text-muted" : "text-navy"}`}>
-					{optional ? optionalLabel : label}
-				</p>
-				{optional && !preview && onSkip && (
-					<button
-						type="button"
-						onClick={onSkip}
-						className="text-sm font-medium text-navy/70"
-						aria-label={`skip upload for ${label}`}
-					>
-						Skip for now
-					</button>
-				)}
-			</div>
+		<div className="rounded-lg bg-card p-4">
+			<p className="mb-3 text-sm font-medium text-ink">{label}</p>
 			{preview ? (
 				<div className="flex flex-col items-center gap-3">
-					{isPdf ? (
-						<div
-							role="img"
-							className="flex h-32 w-full items-center justify-center rounded-xl bg-card text-muted"
-							aria-label="pdf document uploaded"
-						>
-							<span className="text-4xl" aria-hidden="true">
-								📄
-							</span>
-						</div>
-					) : (
-						<img
-							src={preview}
-							alt={`${label} preview`}
-							className="h-32 w-full rounded-xl object-cover"
-						/>
-					)}
+					<img
+						src={preview}
+						alt={`${label} preview`}
+						className="h-40 w-full rounded-lg object-cover"
+					/>
 					<button
 						type="button"
 						onClick={() => inputRef.current?.click()}
-						className="text-sm font-medium text-navy/70"
-						aria-label={`replace ${label}`}
+						className="text-sm font-medium text-brand"
+						aria-label={`retake photo for ${label}`}
 					>
-						Replace file
+						Retake photo
 					</button>
 				</div>
 			) : (
 				<button
 					type="button"
 					onClick={() => inputRef.current?.click()}
-					className={`flex min-h-[120px] w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed bg-white transition-colors ${
-						optional
-							? "border-navy/15 text-muted hover:border-navy/30 hover:bg-navy/5"
-							: "border-navy/25 hover:border-navy/50 hover:bg-navy/5"
-					}`}
-					aria-label={`upload ${label}`}
+					className="flex min-h-[140px] w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-on-surface/25 bg-white transition-colors hover:border-secondary/50 hover:bg-secondary/5"
+					aria-label={`photograph certificate for ${label}`}
 				>
-					<span className="text-2xl" aria-hidden="true">
-						📎
-					</span>
-					<span className="text-sm">tap to upload or take a photo</span>
+					<Camera size={28} strokeWidth={1.5} className="text-secondary" aria-hidden />
+					<span className="text-sm font-medium text-on-surface">Photograph certificate</span>
+					<span className="text-xs text-muted">Use your camera — no PDFs or file uploads</span>
 				</button>
 			)}
 			<input
 				ref={inputRef}
 				type="file"
-				accept="image/jpeg,image/png,application/pdf"
+				accept="image/jpeg,image/png"
 				capture="environment"
 				className="hidden"
 				onChange={(e) => {

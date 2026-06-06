@@ -1,30 +1,31 @@
-export type CertificationStatus = "unverified" | "verified";
+export type CertificationStatus =
+	| "self_reported"
+	| "pending_review"
+	| "verified"
+	| "rejected";
 
 export type CertificationType =
 	| "cpr_aed"
+	| "first_aid"
 	| "medical_professional"
 	| "water_rescue"
-	| "mountain_wilderness_rescue"
-	| "fire_safety"
-	| "road_accident_response"
-	| "mental_health_first_aid"
-	| "other";
+	| "mountain_rescue";
 
 export type User = {
 	id: string;
 	firstName: string;
 	lastName: string;
-	email?: string;
-	phone?: string;
+	phone: string;
+	dateOfBirth: string;
 	createdAt: string;
 };
 
 export type Certification = {
 	id: string;
 	type: CertificationType;
-	customLabel?: string;
 	status: CertificationStatus;
 	documentUrl?: string;
+	rejectionReason?: string;
 	verifiedAt?: string;
 };
 

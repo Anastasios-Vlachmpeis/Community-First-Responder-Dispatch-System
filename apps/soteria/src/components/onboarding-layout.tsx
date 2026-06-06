@@ -1,52 +1,61 @@
 import type { ReactNode } from "react";
 
+import { BrandMark } from "~/components/brand-mark";
+
+const SIGNUP_STEPS = 4;
+
 type OnboardingLayoutProps = {
-	phase: 1 | 2;
+	step?: 1 | 2 | 3 | 4;
+	title?: string;
+	subtitle?: string;
 	children: ReactNode;
 };
 
-const phaseLabels: Record<1 | 2, string> = {
-	1: "Sign up",
-	2: "Your skills",
+const stepLabels: Record<1 | 2 | 3 | 4, string> = {
+	1: "Phone number",
+	2: "Verification",
+	3: "Your details",
+	4: "Your skills",
 };
 
-export const OnboardingLayout = ({ phase, children }: OnboardingLayoutProps) => (
-	<div className="flex min-h-full flex-col bg-white">
-		<header className="sticky top-0 z-40 border-b border-navy/5 bg-white">
-			<div className="mx-auto flex max-w-[480px] items-center justify-between px-4 py-3">
-				<div className="flex items-center gap-2">
-					<div
-						className="flex h-8 w-8 items-center justify-center rounded-full bg-navy text-xs font-bold text-white"
-						aria-hidden="true"
-					>
-						S
-					</div>
-					<span className="text-sm font-bold tracking-wide text-navy">Soteria</span>
-				</div>
-				<p className="text-xs text-muted">
-					Step {phase} of 2 · {phaseLabels[phase]}
-				</p>
-			</div>
-			<div className="mx-auto max-w-[480px] px-4 pb-3">
-				<div
-					className="flex gap-1.5"
-					role="progressbar"
-					aria-valuenow={phase}
-					aria-valuemin={1}
-					aria-valuemax={2}
-					aria-label={`onboarding progress, step ${phase} of 2`}
-				>
-					{[1, 2].map((s) => (
+export const OnboardingLayout = ({ step, title, subtitle, children }: OnboardingLayoutProps) => (
+	<div className="app-shell">
+		<header className="app-header">
+			<div className="app-header-inner max-w-[400px]">
+				<BrandMark size="sm" />
+				{step && (
+					<div className="mt-5">
+						<p className="text-xs font-semibold tracking-wide text-muted uppercase">
+							Step {step} of {SIGNUP_STEPS} · {stepLabels[step]}
+						</p>
 						<div
-							key={s}
-							className={`h-1.5 flex-1 rounded-full transition-colors ${
-								s <= phase ? "bg-navy" : "bg-navy/10"
-							}`}
-						/>
-					))}
-				</div>
+							className="progress-track mt-2"
+							role="progressbar"
+							aria-valuenow={step}
+							aria-valuemin={1}
+							aria-valuemax={SIGNUP_STEPS}
+							aria-label={`signup progress, step ${step} of ${SIGNUP_STEPS}`}
+						>
+							{Array.from({ length: SIGNUP_STEPS }, (_, i) => i + 1).map((s) => (
+								<div
+									key={s}
+									className={`progress-segment ${s <= step ? "progress-segment-active" : ""}`}
+								/>
+							))}
+						</div>
+					</div>
+				)}
 			</div>
 		</header>
-		<main className="step-enter mx-auto w-full max-w-[480px] flex-1 px-4 py-6">{children}</main>
+
+		<main className="app-main step-enter max-w-[400px]">
+			{(title || subtitle) && (
+				<div className="mb-6">
+					{title && <h1 className="screen-title">{title}</h1>}
+					{subtitle && <p className="screen-subtitle mt-1.5">{subtitle}</p>}
+				</div>
+			)}
+			{children}
+		</main>
 	</div>
 );
