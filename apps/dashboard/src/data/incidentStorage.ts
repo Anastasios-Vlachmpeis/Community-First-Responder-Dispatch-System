@@ -1,15 +1,25 @@
-import type { Incident } from "~/domain/types";
+import type { AllyResponseStatus, Incident } from "~/domain/types";
 
 const STORAGE_KEY = "soteria-incidents";
 
+type PersistedIncident = Incident & { contactedAllyIds?: string[] };
+
 type PersistedState = {
-	operatorIncidents: Incident[];
-	overrides: Record<string, Pick<Incident, "contactedAllyIds" | "handled">>;
+	operatorIncidents: PersistedIncident[];
+	overrides: Record<string, Pick<Incident, "allyStatuses" | "handled">>;
 };
 
-const normalize = (inc: Incident): Incident => ({
+const migrateAllyStatuses = (inc: PersistedIncident): Partial<Record<string, AllyResponseStatus>> => {
+	const statuses = { ...inc.allyStatuses };
+	if (inc.contactedAllyIds?.length) {
+		for (const id of inc.contactedAllyIds) statuses[id] = "accepted";
+	}
+	return statuses;
+};
+
+const normalize = (inc: PersistedIncident): Incident => ({
 	...inc,
-	contactedAllyIds: inc.contactedAllyIds ?? [],
+	allyStatuses: migrateAllyStatuses(inc),
 	handled: inc.handled ?? false,
 	source: inc.source ?? "operator",
 });
@@ -32,9 +42,9 @@ export const savePersistedState = (incidents: Incident[]) => {
 	const operatorIncidents = incidents.filter((i) => i.source === "operator").map(normalize);
 	const overrides: PersistedState["overrides"] = {};
 	for (const inc of incidents) {
-		if (inc.contactedAllyIds.length > 0 || inc.handled)
+		if (Object.keys(inc.allyStatuses).length > 0 || inc.handled)
 			overrides[inc.id] = {
-				contactedAllyIds: inc.contactedAllyIds,
+				allyStatuses: inc.allyStatuses,
 				handled: inc.handled,
 			};
 	}

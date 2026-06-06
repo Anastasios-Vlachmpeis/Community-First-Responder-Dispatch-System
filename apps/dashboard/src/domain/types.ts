@@ -16,6 +16,8 @@ export type IncidentType =
 export type IncidentStatus = "incoming" | "active" | "dispatched";
 export type ServiceType = "ambulance" | "police" | "fire-engine";
 
+export type AllyResponseStatus = "accepted" | "declined";
+
 export type CertificationType =
 	| "cpr_aed"
 	| "medical_professional"
@@ -52,7 +54,7 @@ export type Incident = {
 	receivedAt: number;
 	callerPhone: string;
 	emergencyServices: EmergencyService[];
-	contactedAllyIds: string[];
+	allyStatuses: Partial<Record<string, AllyResponseStatus>>;
 	handled: boolean;
 	source?: "seed" | "operator";
 };

@@ -3,6 +3,7 @@ import {
 	Cross,
 	Download,
 	Flame,
+	Footprints,
 	MapPin,
 	Phone,
 	Shield,
@@ -28,6 +29,7 @@ import type { MatchedCert } from "~/domain/certMapping";
 import { INCIDENT_TYPES, TYPE_LABEL } from "~/domain/incidentServices";
 import type {
 	Ally,
+	AllyResponseStatus,
 	EmergencyService,
 	Incident,
 	IncidentStatus,
@@ -44,6 +46,7 @@ const Z = {
 	primary: "#EC0016",
 	secondary: "#3B82F6",
 	green: "#32a832",
+	gold: "#D4AF37",
 	text: "#FFFFFF",
 	muted: "rgba(255, 255, 255, 0.5)",
 	bg: "#1a1d23",
@@ -59,6 +62,60 @@ const Z = {
 } as const;
 
 const ICON_OPACITY = 0.93;
+
+const allyResponseCode = (status?: AllyResponseStatus): number =>
+	status === "accepted" ? 1 : status === "declined" ? 2 : 0;
+
+const AllyResponseButtons = ({
+	status,
+	onAccept,
+	onDecline,
+	compact,
+}: {
+	status?: AllyResponseStatus;
+	onAccept: () => void;
+	onDecline: () => void;
+	compact?: boolean;
+}) => (
+	<div style={{ display: "flex", gap: compact ? 4 : 6, width: compact ? undefined : "100%" }}>
+		<button
+			type="button"
+			onClick={onAccept}
+			style={{
+				flex: compact ? undefined : 1,
+				padding: compact ? "4px 8px" : "8px 0",
+				borderRadius: compact ? 6 : 8,
+				border: `1px solid ${status === "accepted" ? Z.gold : Z.border}`,
+				background: status === "accepted" ? `${Z.gold}22` : "rgba(255,255,255,0.04)",
+				color: status === "accepted" ? Z.gold : Z.muted,
+				fontSize: compact ? 8 : 11,
+				fontWeight: 600,
+				cursor: "pointer",
+				fontFamily: Z.font,
+			}}
+		>
+			Accepted
+		</button>
+		<button
+			type="button"
+			onClick={onDecline}
+			style={{
+				flex: compact ? undefined : 1,
+				padding: compact ? "4px 8px" : "8px 0",
+				borderRadius: compact ? 6 : 8,
+				border: `1px solid ${status === "declined" ? "#555" : Z.border}`,
+				background: status === "declined" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.04)",
+				color: status === "declined" ? Z.text : Z.muted,
+				fontSize: compact ? 8 : 11,
+				fontWeight: 600,
+				cursor: "pointer",
+				fontFamily: Z.font,
+			}}
+		>
+			Declined
+		</button>
+	</div>
+);
 
 // ── Labels, icons & colors per type ──────────────────────────────────────────
 
@@ -118,7 +175,7 @@ const SVC_ICON: Record<ServiceType, ReactNode> = {
 const SVC_LABEL: Record<ServiceType, string> = {
 	ambulance:     "Ambulance",
 	police:        "Police",
-	"fire-engine": "Fire Engine",
+	"fire-engine": "Fire Truck",
 };
 
 const svcColor = (type: ServiceType): string => {
@@ -681,7 +738,7 @@ const IncidentCard = ({
 }) => {
 	const typeColor = TYPE_COLOR[incident.type];
 	const statusColor = STATUS_COLOR[incident.status];
-	const contactedCount = incident.contactedAllyIds.length;
+	const acceptedCount = Object.values(incident.allyStatuses).filter((s) => s === "accepted").length;
 	return (
 		<button
 			type="button"
@@ -806,11 +863,11 @@ const IncidentCard = ({
 					<span style={{ opacity: 0.35 }}>·</span>
 					<span
 						style={{
-							color: contactedCount > 0 ? "#22C55E" : Z.muted,
-							fontWeight: contactedCount > 0 ? 600 : 400,
+							color: acceptedCount > 0 ? Z.gold : Z.muted,
+							fontWeight: acceptedCount > 0 ? 600 : 400,
 						}}
 					>
-						{contactedCount} contacted
+						{acceptedCount} accepted
 					</span>
 					<span style={{ opacity: 0.35 }}>·</span>
 					<span style={{ color: nearbyAllies > 0 ? Z.secondary : Z.muted }}>
@@ -917,33 +974,51 @@ const IncidentMarker = ({
 const AllyMarker = ({
 	ally,
 	rank,
-	contacted,
+	response,
+	active,
+	onClick,
 }: {
 	ally: Ally;
 	rank: number;
-	contacted: boolean;
+	response?: AllyResponseStatus;
+	active: boolean;
+	onClick: () => void;
 }) => {
 	const size = rank === 0 ? 28 : rank === 1 ? 22 : 18;
 	const starSize = rank === 0 ? 22 : rank === 1 ? 17 : 14;
+	const pinColor = response === "accepted" ? Z.gold : response === "declined" ? "#000" : "#32a832";
+	const pinStroke = response === "accepted" ? Z.gold : response === "declined" ? "#333" : "#4ade4a";
+	const rankOpacity = active || rank === 0 ? 1 : rank === 1 ? 0.75 : 0.5;
 	return (
 		<Marker longitude={ally.coords[0]} latitude={ally.coords[1]} anchor="center">
 			<div
 				title={ally.name}
+				onClick={(e) => {
+					e.stopPropagation();
+					onClick();
+				}}
 				style={{
 					width: size,
 					height: size,
 					display: "flex",
 					alignItems: "center",
 					justifyContent: "center",
-					opacity: rank === 0 ? 1 : rank === 1 ? 0.75 : 0.5,
-					animation: rank === 0 ? "starPulse 2s ease-in-out infinite" : "none",
-					filter: contacted ? `drop-shadow(0 0 10px ${Z.green})` : undefined,
+					cursor: "pointer",
+					opacity: response === "declined" ? 0.5 : rankOpacity,
+					animation: rank === 0 && response !== "declined" ? "starPulse 2s ease-in-out infinite" : "none",
+					filter: response === "accepted"
+						? `drop-shadow(0 0 10px ${Z.gold})`
+						: response === "declined"
+							? undefined
+							: active
+								? "drop-shadow(0 0 8px #4ade4a)"
+								: undefined,
 				}}
 			>
 				<Star
 					size={starSize}
-					fill={contacted ? Z.green : "#32a832"}
-					color={contacted ? Z.green : "#4ade4a"}
+					fill={pinColor}
+					color={pinStroke}
 					strokeWidth={1.5}
 					style={{ opacity: ICON_OPACITY }}
 				/>
@@ -959,26 +1034,59 @@ const VEHICLE_SVC_ICON: Record<ServiceType, ReactNode> = {
 };
 
 const VehicleMarker = ({ svc, pos }: { svc: EmergencyService; pos: [number, number] }) => {
+	const [infoOpen, setInfoOpen] = useState(false);
 	const color = svc.type === "police" ? Z.secondary : svc.type === "ambulance" ? "#fff" : svcColor(svc.type);
 	const bg = svc.type === "ambulance" ? "rgba(255,255,255,0.95)" : color;
 	return (
 		<Marker longitude={pos[0]} latitude={pos[1]} anchor="center">
-			<div
-				title={`${SVC_LABEL[svc.type]} ${svc.callsign}`}
-				style={{
-					width: 32,
-					height: 32,
-					borderRadius: "50%",
-					background: bg,
-					border: `2px solid ${svc.type === "ambulance" ? "#fff" : color}`,
-					boxShadow: `0 0 16px ${color}80, 0 2px 8px rgba(0,0,0,0.5)`,
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "center",
-					fontFamily: Z.font,
-				}}
-			>
-				{VEHICLE_SVC_ICON[svc.type]}
+			<div style={{ position: "relative", pointerEvents: "auto" }}>
+				{infoOpen && (
+					<div
+						style={{
+							position: "absolute",
+							bottom: "calc(100% + 8px)",
+							left: "50%",
+							transform: "translateX(-50%)",
+							minWidth: 100,
+							background: Z.cardBg,
+							border: `1px solid ${Z.border}`,
+							borderRadius: 8,
+							padding: "8px 10px",
+							boxShadow: "0 4px 16px rgba(0,0,0,0.45)",
+							fontFamily: Z.font,
+							whiteSpace: "nowrap",
+							zIndex: 2,
+						}}
+					>
+						<div style={{ color: Z.muted, fontSize: 10, fontWeight: 500 }}>
+							{SVC_LABEL[svc.type]}
+						</div>
+						<div style={{ color: Z.text, fontSize: 12, fontWeight: 400, marginTop: 2 }}>
+							{svc.callsign}
+						</div>
+					</div>
+				)}
+				<button
+					type="button"
+					onClick={() => setInfoOpen((open) => !open)}
+					aria-label={`${SVC_LABEL[svc.type]} ${svc.callsign}`}
+					style={{
+						width: 32,
+						height: 32,
+						borderRadius: "50%",
+						background: bg,
+						border: `2px solid ${svc.type === "ambulance" ? "#fff" : color}`,
+						boxShadow: `0 0 16px ${color}80, 0 2px 8px rgba(0,0,0,0.5)`,
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						fontFamily: Z.font,
+						cursor: "pointer",
+						padding: 0,
+					}}
+				>
+					{VEHICLE_SVC_ICON[svc.type]}
+				</button>
 			</div>
 		</Marker>
 	);
@@ -991,16 +1099,15 @@ const RouteLayer = ({
 	services,
 	serviceRoutes,
 	incident,
-	contactedAllyIds,
+	allyStatuses,
 }: {
 	allies: Ally[];
 	allyRoutes: Record<string, RouteData>;
 	services: EmergencyService[];
 	serviceRoutes: Record<string, RouteData>;
 	incident: Incident;
-	contactedAllyIds: string[];
+	allyStatuses: Partial<Record<string, AllyResponseStatus>>;
 }) => {
-	const contactedSet = useMemo(() => new Set(contactedAllyIds), [contactedAllyIds]);
 	const data = useMemo(
 		(): GeoJSON.FeatureCollection => ({
 			type: "FeatureCollection",
@@ -1014,7 +1121,7 @@ const RouteLayer = ({
 					properties: {
 						routeType: "ally",
 						rank,
-						contacted: contactedSet.has(ally.id) ? 1 : 0,
+						response: allyResponseCode(allyStatuses[ally.id]),
 					},
 				})),
 				...services.map((svc) => ({
@@ -1036,11 +1143,24 @@ const RouteLayer = ({
 				})),
 			],
 		}),
-		[allies, allyRoutes, services, serviceRoutes, incident, contactedSet],
+		[allies, allyRoutes, services, serviceRoutes, incident, allyStatuses],
 	);
 
 	const allyLineWidth = 2;
 	const topAllyLineWidth = allyLineWidth * 1.15;
+	const allyRouteColor: mapboxgl.Expression = [
+		"case",
+		["==", ["get", "response"], 1], Z.gold,
+		["==", ["get", "response"], 2], "#000000",
+		Z.green,
+	];
+	const allyRouteOpacity: mapboxgl.Expression = [
+		"case",
+		["==", ["get", "response"], 2], 0.5,
+		["==", ["get", "rank"], 0], 0.95,
+		["==", ["get", "rank"], 1], 0.7,
+		0.45,
+	];
 
 	return (
 		<Source id="sel-routes" type="geojson" data={data}>
@@ -1050,10 +1170,14 @@ const RouteLayer = ({
 				filter={["all", ["==", ["get", "routeType"], "ally"], ["==", ["get", "rank"], 0]]}
 				layout={{ "line-join": "round", "line-cap": "round" }}
 				paint={{
-					"line-color": Z.green,
+					"line-color": allyRouteColor,
 					"line-width": topAllyLineWidth + 4,
 					"line-blur": 8,
-					"line-opacity": 0.45,
+					"line-opacity": [
+						"case",
+						["==", ["get", "response"], 2], 0.25,
+						0.45,
+					],
 					"line-dasharray": [2, 2],
 				}}
 			/>
@@ -1063,15 +1187,10 @@ const RouteLayer = ({
 				filter={["==", ["get", "routeType"], "ally"]}
 				layout={{ "line-join": "round", "line-cap": "round" }}
 				paint={{
-					"line-color": Z.green,
+					"line-color": allyRouteColor,
 					"line-width": ["case", ["==", ["get", "rank"], 0], topAllyLineWidth, allyLineWidth],
 					"line-dasharray": [2, 2],
-					"line-opacity": [
-						"case",
-						["==", ["get", "rank"], 0], 0.95,
-						["==", ["get", "rank"], 1], 0.7,
-						0.45,
-					],
+					"line-opacity": allyRouteOpacity,
 				}}
 			/>
 			<Layer
@@ -1123,18 +1242,32 @@ const RadiusCircle = ({ coords }: { coords: [number, number] }) => (
 	</>
 );
 
+// static on-foot ETA: actual walking-route distance ÷ 8 km/h
+const WALK_KMH = 8;
+const walkEtaMinutes = (distanceM: number) => (distanceM / 1000 / WALK_KMH) * 60;
+
 const AllyMapPopup = ({
 	ally,
 	matchedCerts,
-	contacted,
-	onToggleContact,
+	response,
+	walkEtaMin,
+	onAccept,
+	onDecline,
 }: {
 	ally: Ally;
 	matchedCerts: MatchedCert[];
-	contacted: boolean;
-	onToggleContact: () => void;
+	response?: AllyResponseStatus;
+	walkEtaMin: number | null;
+	onAccept: () => void;
+	onDecline: () => void;
 }) => (
-	<Marker longitude={ally.coords[0]} latitude={ally.coords[1]} anchor="bottom" offset={[0, -36] as [number, number]}>
+	<Marker
+		longitude={ally.coords[0]}
+		latitude={ally.coords[1]}
+		anchor="bottom"
+		offset={[0, -36] as [number, number]}
+		style={{ zIndex: 10 }}
+	>
 		<div
 			style={{
 				width: 220,
@@ -1156,6 +1289,22 @@ const AllyMapPopup = ({
 					</div>
 				</div>
 			</div>
+			{walkEtaMin !== null && (
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 6,
+						color: Z.text,
+						fontSize: 12,
+						fontWeight: 600,
+						marginBottom: 12,
+					}}
+				>
+					<Footprints size={13} color={Z.muted} style={{ opacity: ICON_OPACITY }} />
+					<span>~{walkEtaMin} min on foot</span>
+				</div>
+			)}
 			{matchedCerts.length > 0 && (
 				<ul
 					style={{
@@ -1190,25 +1339,13 @@ const AllyMapPopup = ({
 				<Phone size={14} style={{ opacity: ICON_OPACITY }} />
 				Call
 			</a>
-			<button
-				type="button"
-				onClick={onToggleContact}
-				style={{
-					display: "block",
-					width: "100%",
-					marginTop: 8,
-					background: "none",
-					border: "none",
-					color: contacted ? Z.green : Z.muted,
-					fontSize: 10,
-					fontWeight: 600,
-					cursor: "pointer",
-					padding: 0,
-					fontFamily: Z.font,
-				}}
-			>
-				{contacted ? "Contacted ✓" : "Mark contacted"}
-			</button>
+			<div style={{ marginTop: 8 }}>
+				<AllyResponseButtons
+					status={response}
+					onAccept={onAccept}
+					onDecline={onDecline}
+				/>
+			</div>
 		</div>
 	</Marker>
 );
@@ -1233,7 +1370,7 @@ const AllyPanel = ({
 	serviceRoutes: _serviceRoutes,
 	serviceProgress: _serviceProgress,
 	onClose,
-	onToggleContacted,
+	onSetAllyResponse,
 	onSetHandled,
 }: {
 	incident: Incident;
@@ -1242,11 +1379,10 @@ const AllyPanel = ({
 	serviceRoutes: Record<string, RouteData>;
 	serviceProgress: Record<string, number>;
 	onClose: () => void;
-	onToggleContacted: (allyId: string) => void;
+	onSetAllyResponse: (allyId: string, status: AllyResponseStatus) => void;
 	onSetHandled: (handled: boolean) => void;
 }) => {
 	const typeColor = TYPE_COLOR[incident.type];
-	const contactedSet = useMemo(() => new Set(incident.contactedAllyIds), [incident.contactedAllyIds]);
 	const [closing, setClosing] = useState(false);
 	// reset the exit state if a different incident is opened into this panel
 	useEffect(() => setClosing(false), [incident.id]);
@@ -1372,8 +1508,9 @@ const AllyPanel = ({
 							ally={ranked.ally}
 							route={allyRoutes[ranked.ally.id]}
 							matchedCerts={ranked.matchedCerts}
-							contacted={contactedSet.has(ranked.ally.id)}
-							onToggleContact={() => onToggleContacted(ranked.ally.id)}
+							response={incident.allyStatuses[ranked.ally.id]}
+							onAccept={() => onSetAllyResponse(ranked.ally.id, "accepted")}
+							onDecline={() => onSetAllyResponse(ranked.ally.id, "declined")}
 						/>
 					))
 				)}
@@ -1412,82 +1549,72 @@ const AllyResponderCard = ({
 	ally,
 	route,
 	matchedCerts,
-	contacted,
-	onToggleContact,
+	response,
+	onAccept,
+	onDecline,
 }: {
 	ally: Ally;
 	route?: RouteData;
 	matchedCerts: MatchedCert[];
-	contacted: boolean;
-	onToggleContact: () => void;
-}) => (
-	<div
-		style={{
-			display: "flex",
-			alignItems: "center",
-			gap: 10,
-			background: Z.cardBg,
-			border: `1px solid ${contacted ? Z.green + "33" : Z.border}`,
-			borderRadius: Z.radius,
-			padding: "12px 12px",
-			marginBottom: 8,
-		}}
-	>
-		<AllyAvatar ally={ally} size={40} />
-		<div style={{ flex: 1, minWidth: 0 }}>
-			<div style={{ color: contacted ? Z.green : Z.text, fontSize: 13, fontWeight: 400 }}>
-				{ally.name}
+	response?: AllyResponseStatus;
+	onAccept: () => void;
+	onDecline: () => void;
+}) => {
+	const borderColor = response === "accepted" ? `${Z.gold}44` : response === "declined" ? "#333" : Z.border;
+	const nameColor = response === "accepted" ? Z.gold : response === "declined" ? Z.muted : Z.text;
+	return (
+		<div
+			style={{
+				display: "flex",
+				flexDirection: "column",
+				gap: 8,
+				background: Z.cardBg,
+				border: `1px solid ${borderColor}`,
+				borderRadius: Z.radius,
+				padding: "12px 12px",
+				marginBottom: 8,
+				opacity: response === "declined" ? 0.85 : 1,
+			}}
+		>
+			<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+				<AllyAvatar ally={ally} size={40} />
+				<div style={{ flex: 1, minWidth: 0 }}>
+					<div style={{ color: nameColor, fontSize: 13, fontWeight: 400 }}>{ally.name}</div>
+					<div style={{ color: Z.muted, fontSize: 11, marginTop: 2 }}>
+						{allyRoleLabel(ally, matchedCerts)}
+					</div>
+					<div style={{ color: Z.muted, fontSize: 10, marginTop: 3, lineHeight: 1.4 }}>
+						{matchedCerts.length > 0
+							? matchedCerts.slice(0, 3).map((c) => c.label).join(" · ")
+							: route
+								? `${formatDuration(route.durationS)} · ${formatDist(route.distanceM)}`
+								: "Loading route…"}
+					</div>
+				</div>
+				<a
+					href={`tel:${ally.phone}`}
+					style={{
+						width: 40,
+						height: 40,
+						borderRadius: 8,
+						background: Z.green,
+						color: "#fff",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						textDecoration: "none",
+						boxShadow: `0 2px 8px ${Z.green}40`,
+						flexShrink: 0,
+					}}
+					aria-label={`Call ${ally.name}`}
+				>
+					<Phone size={16} style={{ opacity: ICON_OPACITY }} />
+				</a>
 			</div>
-			<div style={{ color: Z.muted, fontSize: 11, marginTop: 2 }}>
-				{allyRoleLabel(ally, matchedCerts)}
-			</div>
-			<div style={{ color: Z.muted, fontSize: 10, marginTop: 3, lineHeight: 1.4 }}>
-				{matchedCerts.length > 0
-					? matchedCerts.slice(0, 3).map((c) => c.label).join(" · ")
-					: route
-						? `${formatDuration(route.durationS)} · ${formatDist(route.distanceM)}`
-						: "Loading route…"}
-			</div>
+			<AllyResponseButtons status={response} onAccept={onAccept} onDecline={onDecline} compact />
 		</div>
-		<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
-			<a
-				href={`tel:${ally.phone}`}
-				style={{
-					width: 40,
-					height: 40,
-					borderRadius: 8,
-					background: Z.green,
-					color: "#fff",
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "center",
-					textDecoration: "none",
-					boxShadow: `0 2px 8px ${Z.green}40`,
-				}}
-				aria-label={`Call ${ally.name}`}
-			>
-				<Phone size={16} style={{ opacity: ICON_OPACITY }} />
-			</a>
-			<button
-				type="button"
-				onClick={onToggleContact}
-				style={{
-					background: "none",
-					border: "none",
-					color: contacted ? Z.green : Z.muted,
-					fontSize: 8,
-					fontWeight: 600,
-					cursor: "pointer",
-					padding: 0,
-					fontFamily: Z.font,
-					whiteSpace: "nowrap",
-				}}
-			>
-				{contacted ? "✓" : "mark"}
-			</button>
-		</div>
-	</div>
-);
+	);
+};
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
@@ -1499,6 +1626,7 @@ export const SoteriaMap = () => {
 		mergeIncidents(getSeedIncidents(), loadPersistedState()),
 	);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [activeAllyId, setActiveAllyId] = useState<string | null>(null);
 	const [allyRoutes, setAllyRoutes] = useState<Record<string, RouteData>>({});
 	const [serviceRoutes, setServiceRoutes] = useState<Record<string, RouteData>>({});
 	const [serviceProgress, setServiceProgress] = useState<Record<string, number>>({});
@@ -1534,6 +1662,14 @@ export const SoteriaMap = () => {
 	}, [selectedIncident, allyPool]);
 
 	const topAllies = useMemo(() => rankedAllies.map((r) => r.ally), [rankedAllies]);
+
+	// popup defaults to the top-ranked responder; clicking a responder icon overrides it
+	const activeRanked = useMemo(
+		() => rankedAllies.find((r) => r.ally.id === activeAllyId) ?? rankedAllies[0] ?? null,
+		[rankedAllies, activeAllyId],
+	);
+
+	useEffect(() => setActiveAllyId(null), [selectedId]);
 
 	useEffect(() => {
 		const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -1616,18 +1752,13 @@ export const SoteriaMap = () => {
 
 	const handleSelect = (id: string) => setSelectedId((prev) => (prev === id ? null : id));
 
-	const toggleContactedAlly = useCallback((incidentId: string, allyId: string) => {
+	const setAllyResponse = useCallback((incidentId: string, allyId: string, status: AllyResponseStatus) => {
 		setIncidents((prev) =>
-			prev.map((inc) => {
-				if (inc.id !== incidentId) return inc;
-				const contacted = inc.contactedAllyIds.includes(allyId);
-				return {
-					...inc,
-					contactedAllyIds: contacted
-						? inc.contactedAllyIds.filter((id) => id !== allyId)
-						: [...inc.contactedAllyIds, allyId],
-				};
-			}),
+			prev.map((inc) =>
+				inc.id !== incidentId
+					? inc
+					: { ...inc, allyStatuses: { ...inc.allyStatuses, [allyId]: status } },
+			),
 		);
 	}, []);
 
@@ -1652,7 +1783,7 @@ export const SoteriaMap = () => {
 			receivedAt,
 			callerPhone: `+852 9${Math.floor(Math.random() * 9000000 + 1000000)}`,
 			emergencyServices: createEmergencyServices(coords, type, Date.now()),
-			contactedAllyIds: [],
+			allyStatuses: {},
 			handled: false,
 			source: "operator",
 		};
@@ -1769,7 +1900,7 @@ export const SoteriaMap = () => {
 									services={selectedIncident.emergencyServices}
 									serviceRoutes={serviceRoutes}
 									incident={selectedIncident}
-									contactedAllyIds={selectedIncident.contactedAllyIds}
+									allyStatuses={selectedIncident.allyStatuses}
 								/>
 							</>
 						)}
@@ -1790,19 +1921,11 @@ export const SoteriaMap = () => {
 									key={ally.id}
 									ally={ally}
 									rank={rank}
-									contacted={selectedIncident.contactedAllyIds.includes(ally.id)}
+									response={selectedIncident.allyStatuses[ally.id]}
+									active={activeRanked?.ally.id === ally.id}
+									onClick={() => setActiveAllyId(ally.id)}
 								/>
 							))}
-
-						{selectedIncident &&
-							rankedAllies[0] && (
-								<AllyMapPopup
-									ally={rankedAllies[0].ally}
-									matchedCerts={rankedAllies[0].matchedCerts}
-									contacted={selectedIncident.contactedAllyIds.includes(rankedAllies[0].ally.id)}
-									onToggleContact={() => toggleContactedAlly(selectedIncident.id, rankedAllies[0].ally.id)}
-								/>
-							)}
 
 						{selectedIncident &&
 							selectedIncident.emergencyServices.map((svc) => {
@@ -1819,6 +1942,21 @@ export const SoteriaMap = () => {
 									: fallback;
 								return <VehicleMarker key={svc.id} svc={svc} pos={pos} />;
 							})}
+
+						{selectedIncident && activeRanked && (
+							<AllyMapPopup
+								ally={activeRanked.ally}
+								matchedCerts={activeRanked.matchedCerts}
+								response={selectedIncident.allyStatuses[activeRanked.ally.id]}
+								walkEtaMin={
+									allyRoutes[activeRanked.ally.id]
+										? Math.ceil(walkEtaMinutes(allyRoutes[activeRanked.ally.id].distanceM))
+										: null
+								}
+								onAccept={() => setAllyResponse(selectedIncident.id, activeRanked.ally.id, "accepted")}
+								onDecline={() => setAllyResponse(selectedIncident.id, activeRanked.ally.id, "declined")}
+							/>
+						)}
 						</MapGL>
 						</div>
 					</div>
@@ -1832,7 +1970,7 @@ export const SoteriaMap = () => {
 						serviceRoutes={serviceRoutes}
 						serviceProgress={serviceProgress}
 						onClose={() => setSelectedId(null)}
-						onToggleContacted={(allyId) => toggleContactedAlly(selectedIncident.id, allyId)}
+						onSetAllyResponse={(allyId, status) => setAllyResponse(selectedIncident.id, allyId, status)}
 						onSetHandled={(handled) => setIncidentHandled(selectedIncident.id, handled)}
 					/>
 				)}
