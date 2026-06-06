@@ -1246,8 +1246,48 @@ const RadiusCircle = ({ coords }: { coords: [number, number] }) => (
 const WALK_KMH = 8;
 const walkEtaMinutes = (distanceM: number) => (distanceM / 1000 / WALK_KMH) * 60;
 
+type MapPopupAnchor =
+	| "center"
+	| "top"
+	| "bottom"
+	| "left"
+	| "right"
+	| "top-left"
+	| "top-right"
+	| "bottom-left"
+	| "bottom-right";
+
+const allyPopupPlacement = (
+	allyCoords: [number, number],
+	incidentCoords: [number, number],
+): { anchor: MapPopupAnchor; offset: [number, number] } => {
+	const dx = incidentCoords[0] - allyCoords[0];
+	const dy = incidentCoords[1] - allyCoords[1];
+	const PIN_GAP = 14;
+
+	if (Math.hypot(dx, dy) < 1e-9) return { anchor: "bottom", offset: [0, -36] };
+
+	const ax = Math.abs(dx);
+	const ay = Math.abs(dy);
+
+	if (ax > ay * 1.4) {
+		if (dx > 0) return { anchor: "right", offset: [-PIN_GAP, 0] };
+		return { anchor: "left", offset: [PIN_GAP, 0] };
+	}
+	if (ay > ax * 1.4) {
+		if (dy > 0) return { anchor: "top", offset: [0, PIN_GAP] };
+		return { anchor: "bottom", offset: [0, -36] };
+	}
+
+	if (dx > 0 && dy > 0) return { anchor: "top-right", offset: [-PIN_GAP, PIN_GAP] };
+	if (dx < 0 && dy > 0) return { anchor: "top-left", offset: [PIN_GAP, PIN_GAP] };
+	if (dx > 0 && dy < 0) return { anchor: "bottom-right", offset: [-PIN_GAP, -PIN_GAP] };
+	return { anchor: "bottom-left", offset: [PIN_GAP, -PIN_GAP] };
+};
+
 const AllyMapPopup = ({
 	ally,
+	incidentCoords,
 	matchedCerts,
 	response,
 	walkEtaMin,
@@ -1255,17 +1295,20 @@ const AllyMapPopup = ({
 	onDecline,
 }: {
 	ally: Ally;
+	incidentCoords: [number, number];
 	matchedCerts: MatchedCert[];
 	response?: AllyResponseStatus;
 	walkEtaMin: number | null;
 	onAccept: () => void;
 	onDecline: () => void;
-}) => (
+}) => {
+	const { anchor, offset } = allyPopupPlacement(ally.coords, incidentCoords);
+	return (
 	<Marker
 		longitude={ally.coords[0]}
 		latitude={ally.coords[1]}
-		anchor="bottom"
-		offset={[0, -36] as [number, number]}
+		anchor={anchor}
+		offset={offset}
 		style={{ zIndex: 10 }}
 	>
 		<div
@@ -1348,7 +1391,8 @@ const AllyMapPopup = ({
 			</div>
 		</div>
 	</Marker>
-);
+	);
+};
 
 const IncidentDetailRow = ({
 	icon,
@@ -1369,7 +1413,10 @@ const AllyPanel = ({
 	allyRoutes,
 	serviceRoutes: _serviceRoutes,
 	serviceProgress: _serviceProgress,
+	focusedAllyId,
+	activeAllyId,
 	onClose,
+	onFocusAlly,
 	onSetAllyResponse,
 	onSetHandled,
 }: {
@@ -1378,14 +1425,23 @@ const AllyPanel = ({
 	allyRoutes: Record<string, RouteData>;
 	serviceRoutes: Record<string, RouteData>;
 	serviceProgress: Record<string, number>;
+	focusedAllyId: string | null;
+	activeAllyId: string | null;
 	onClose: () => void;
+	onFocusAlly: (allyId: string) => void;
 	onSetAllyResponse: (allyId: string, status: AllyResponseStatus) => void;
 	onSetHandled: (handled: boolean) => void;
 }) => {
 	const typeColor = TYPE_COLOR[incident.type];
+	const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 	const [closing, setClosing] = useState(false);
 	// reset the exit state if a different incident is opened into this panel
 	useEffect(() => setClosing(false), [incident.id]);
+
+	useEffect(() => {
+		if (!activeAllyId) return;
+		cardRefs.current[activeAllyId]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+	}, [activeAllyId]);
 	const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
 	const startClose = () => {
 		setClosing(true);
@@ -1505,10 +1561,13 @@ const AllyPanel = ({
 					rankedAllies.map((ranked) => (
 						<AllyResponderCard
 							key={ranked.ally.id}
+							cardRef={(el) => { cardRefs.current[ranked.ally.id] = el; }}
 							ally={ranked.ally}
 							route={allyRoutes[ranked.ally.id]}
 							matchedCerts={ranked.matchedCerts}
 							response={incident.allyStatuses[ranked.ally.id]}
+							active={focusedAllyId === ranked.ally.id}
+							onFocus={() => onFocusAlly(ranked.ally.id)}
 							onAccept={() => onSetAllyResponse(ranked.ally.id, "accepted")}
 							onDecline={() => onSetAllyResponse(ranked.ally.id, "declined")}
 						/>
@@ -1546,43 +1605,95 @@ const AllyPanel = ({
 };
 
 const AllyResponderCard = ({
+	cardRef,
 	ally,
 	route,
 	matchedCerts,
 	response,
+	active,
+	onFocus,
 	onAccept,
 	onDecline,
 }: {
+	cardRef?: (el: HTMLDivElement | null) => void;
 	ally: Ally;
 	route?: RouteData;
 	matchedCerts: MatchedCert[];
 	response?: AllyResponseStatus;
+	active: boolean;
+	onFocus: () => void;
 	onAccept: () => void;
 	onDecline: () => void;
 }) => {
-	const borderColor = response === "accepted" ? `${Z.gold}44` : response === "declined" ? "#333" : Z.border;
-	const nameColor = response === "accepted" ? Z.gold : response === "declined" ? Z.muted : Z.text;
+	const borderColor = !active ? Z.border : response === "accepted" ? `${Z.gold}44` : response === "declined" ? "#333" : Z.border;
+	const nameColor = !active ? Z.text : response === "accepted" ? Z.gold : response === "declined" ? Z.muted : Z.text;
 	return (
 		<div
+			ref={cardRef}
+			role="button"
+			tabIndex={0}
+			onClick={onFocus}
+			onKeyDown={(e) => {
+				if (e.key !== "Enter" && e.key !== " ") return;
+				e.preventDefault();
+				onFocus();
+			}}
 			style={{
 				display: "flex",
 				flexDirection: "column",
 				gap: 8,
-				background: Z.cardBg,
-				border: `1px solid ${borderColor}`,
+				background: active ? "rgba(50, 168, 50, 0.1)" : Z.cardBg,
+				border: `1px solid ${active ? Z.green + "66" : borderColor}`,
+				borderLeft: active ? `3px solid ${Z.green}` : undefined,
 				borderRadius: Z.radius,
 				padding: "12px 12px",
 				marginBottom: 8,
-				opacity: response === "declined" ? 0.85 : 1,
+				opacity: active && response === "declined" ? 0.85 : 1,
+				boxShadow: active ? `0 0 14px ${Z.green}28` : undefined,
+				transition: "background 0.2s, border-color 0.2s, box-shadow 0.2s",
+				cursor: "pointer",
 			}}
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
 				<AllyAvatar ally={ally} size={40} />
 				<div style={{ flex: 1, minWidth: 0 }}>
-					<div style={{ color: nameColor, fontSize: 13, fontWeight: 400 }}>{ally.name}</div>
-					<div style={{ color: Z.muted, fontSize: 11, marginTop: 2 }}>
-						{allyRoleLabel(ally, matchedCerts)}
+					<div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+						<span
+							style={{
+								color: nameColor,
+								fontSize: 13,
+								fontWeight: 400,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+								flex: 1,
+								minWidth: 0,
+							}}
+						>
+							{ally.name}
+						</span>
+						{route && (
+							<span
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: 3,
+									flexShrink: 0,
+									color: Z.muted,
+									fontSize: 11,
+									fontWeight: 600,
+								}}
+							>
+								<Footprints size={11} style={{ opacity: ICON_OPACITY }} />
+								{Math.ceil(walkEtaMinutes(route.distanceM))} mins away
+							</span>
+						)}
 					</div>
+					{active && (
+						<div style={{ color: Z.muted, fontSize: 11, marginTop: 2 }}>
+							{allyRoleLabel(ally, matchedCerts)}
+						</div>
+					)}
 					<div style={{ color: Z.muted, fontSize: 10, marginTop: 3, lineHeight: 1.4 }}>
 						{matchedCerts.length > 0
 							? matchedCerts.slice(0, 3).map((c) => c.label).join(" · ")
@@ -1593,6 +1704,7 @@ const AllyResponderCard = ({
 				</div>
 				<a
 					href={`tel:${ally.phone}`}
+					onClick={(e) => e.stopPropagation()}
 					style={{
 						width: 40,
 						height: 40,
@@ -1611,7 +1723,11 @@ const AllyResponderCard = ({
 					<Phone size={16} style={{ opacity: ICON_OPACITY }} />
 				</a>
 			</div>
-			<AllyResponseButtons status={response} onAccept={onAccept} onDecline={onDecline} compact />
+			{active && (
+				<div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+					<AllyResponseButtons status={response} onAccept={onAccept} onDecline={onDecline} compact />
+				</div>
+			)}
 		</div>
 	);
 };
@@ -1946,6 +2062,7 @@ export const SoteriaMap = () => {
 						{selectedIncident && activeRanked && (
 							<AllyMapPopup
 								ally={activeRanked.ally}
+								incidentCoords={selectedIncident.coords}
 								matchedCerts={activeRanked.matchedCerts}
 								response={selectedIncident.allyStatuses[activeRanked.ally.id]}
 								walkEtaMin={
@@ -1969,7 +2086,10 @@ export const SoteriaMap = () => {
 						allyRoutes={allyRoutes}
 						serviceRoutes={serviceRoutes}
 						serviceProgress={serviceProgress}
+						focusedAllyId={activeRanked?.ally.id ?? null}
+						activeAllyId={activeAllyId}
 						onClose={() => setSelectedId(null)}
+						onFocusAlly={setActiveAllyId}
 						onSetAllyResponse={(allyId, status) => setAllyResponse(selectedIncident.id, allyId, status)}
 						onSetHandled={(handled) => setIncidentHandled(selectedIncident.id, handled)}
 					/>
