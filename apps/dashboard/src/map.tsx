@@ -1247,6 +1247,14 @@ const AllyPanel = ({
 }) => {
 	const typeColor = TYPE_COLOR[incident.type];
 	const contactedSet = useMemo(() => new Set(incident.contactedAllyIds), [incident.contactedAllyIds]);
+	const [closing, setClosing] = useState(false);
+	// reset the exit state if a different incident is opened into this panel
+	useEffect(() => setClosing(false), [incident.id]);
+	const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+	const startClose = () => {
+		setClosing(true);
+		window.setTimeout(onClose, 280);
+	};
 	return (
 		<aside
 			style={{
@@ -1260,7 +1268,10 @@ const AllyPanel = ({
 				flexDirection: "column",
 				flexShrink: 0,
 				fontFamily: Z.font,
-				animation: "slideInRight 0.22s ease",
+				transform: closing ? "translateX(110%)" : "translateX(0)",
+				opacity: closing ? 0 : 1,
+				transition: `transform 0.28s ${EASE}, opacity 0.28s ${EASE}`,
+				animation: closing ? undefined : `slideInRight 0.28s ${EASE}`,
 			}}
 		>
 			<div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
@@ -1283,7 +1294,7 @@ const AllyPanel = ({
 							</span>
 							<button
 								type="button"
-								onClick={onClose}
+								onClick={startClose}
 								style={{
 									background: "none",
 									border: "none",
