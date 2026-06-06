@@ -1,5 +1,17 @@
+import { pickRandomPicture } from "~/data/allyPictures";
 import { generateAllies } from "~/data/generateAllies";
 import type { Ally, Certification, IncidentType } from "~/domain/types";
+
+const mulberry32 = (seed: number) => {
+	let s = seed;
+	return () => {
+		s |= 0;
+		s = (s + 0x6d2b79f5) | 0;
+		let t = Math.imul(s ^ (s >>> 15), 1 | s);
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+};
 
 const cert = (
 	id: string,
@@ -117,7 +129,15 @@ let pool: Ally[] | null = null;
 
 export const getAllyPool = (): Ally[] => {
 	if (pool) return pool;
+	const seedRng = mulberry32(7);
+	const withPicture = (ally: Omit<Ally, "pictureUrl">): Ally => ({
+		...ally,
+		pictureUrl: pickRandomPicture(seedRng),
+	});
 	const seedIds = new Set(SEED_ALLIES.map((a) => a.id));
-	pool = [...SEED_ALLIES, ...generateAllies().filter((a) => !seedIds.has(a.id))];
+	pool = [
+		...SEED_ALLIES.map(withPicture),
+		...generateAllies().filter((a) => !seedIds.has(a.id)),
+	];
 	return pool;
 };

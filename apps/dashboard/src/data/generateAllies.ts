@@ -1,3 +1,4 @@
+import { pickRandomPicture } from "~/data/allyPictures";
 import { HK_BOUNDS } from "~/config/hk";
 import { CERTIFICATION_TYPES } from "~/domain/certLabels";
 import { skillsFromCertifications } from "~/domain/certToSkills";
@@ -79,6 +80,7 @@ export const generateAllies = (count = ALLY_POOL_SIZE, seed = ALLY_SEED): Ally[]
 			coords: [lng, lat],
 			credentialScore: Math.floor(rng() * 35) + 55,
 			certifications: hasCerts ? certifications : undefined,
+			pictureUrl: pickRandomPicture(rng),
 		});
 	}
 

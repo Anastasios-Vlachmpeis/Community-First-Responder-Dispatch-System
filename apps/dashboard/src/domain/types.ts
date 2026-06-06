@@ -65,6 +65,7 @@ export type Ally = {
 	coords: [number, number];
 	credentialScore: number;
 	certifications?: Certification[];
+	pictureUrl: string;
 };
 
 export type RouteData = {

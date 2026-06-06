@@ -13,7 +13,12 @@ import type { MapRef } from "react-map-gl/mapbox";
 import { Layer, Map as MapGL, Marker, Source } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { getAllyPool } from "~/data/allies";
-import { computeRemainingEtaMinutes, computeServiceProgress, createEmergencyServices } from "~/data/dispatch";
+import {
+	computeRemainingEtaMinutes,
+	computeServiceProgress,
+	createEmergencyServices,
+	sanitizeServiceOrigin,
+} from "~/data/dispatch";
 import { HK_HOTSPOTS } from "~/data/hotspots";
 import { getSeedIncidents } from "~/data/incidents";
 import { loadPersistedState, mergeIncidents, savePersistedState } from "~/data/incidentStorage";
@@ -30,6 +35,7 @@ import type {
 	ServiceType,
 } from "~/domain/types";
 import { countRankedAllies, rankAllies, type RankedAlly } from "~/features/recommender/rankAllies";
+import { coordFromTuple, tupleFromCoord } from "~/lib/geo";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -149,6 +155,39 @@ const avatarColor = (name: string): string => {
 	return `hsl(${hues[Math.abs(hash) % hues.length]}, 42%, 40%)`;
 };
 
+const AllyAvatar = ({ ally, size }: { ally: Ally; size: number }) =>
+	ally.pictureUrl ? (
+		<img
+			src={ally.pictureUrl}
+			alt=""
+			style={{
+				width: size,
+				height: size,
+				borderRadius: "50%",
+				objectFit: "cover",
+				flexShrink: 0,
+			}}
+		/>
+	) : (
+		<div
+			style={{
+				width: size,
+				height: size,
+				borderRadius: "50%",
+				background: avatarColor(ally.name),
+				color: "#fff",
+				fontSize: size * 0.32,
+				fontWeight: 700,
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center",
+				flexShrink: 0,
+			}}
+		>
+			{allyInitials(ally.name)}
+		</div>
+	);
+
 const formatEtaDuration = (totalSeconds: number): string => {
 	const secs = Math.max(0, Math.round(totalSeconds));
 	const min = Math.floor(secs / 60);
@@ -176,12 +215,24 @@ function haversineM([lng1, lat1]: [number, number], [lng2, lat2]: [number, numbe
 	return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+const isValidDrivingRoute = (
+	route: RouteData,
+	from: [number, number],
+	to: [number, number],
+): boolean => {
+	if (route.coords.length < 2) return false;
+	// a 2-point route over a real distance means Mapbox fell back to a straight line
+	// (failed to route) — reject it; otherwise trust the road geometry as-is.
+	if (route.coords.length === 2 && haversineM(from, to) > 400) return false;
+	return true;
+};
+
 async function fetchRoute(
 	from: [number, number],
 	to: [number, number],
 	profile: "walking" | "driving",
 	token: string,
-): Promise<RouteData> {
+): Promise<RouteData | null> {
 	const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${from[0]},${from[1]};${to[0]},${to[1]}?geometries=geojson&access_token=${token}`;
 	try {
 		const res = await fetch(url);
@@ -193,16 +244,46 @@ async function fetchRoute(
 			}>;
 		};
 		const route = json.routes?.[0];
-		if (!route) throw new Error("no route");
-		return { coords: route.geometry.coordinates, distanceM: route.distance, durationS: route.duration };
-	} catch {
-		const d = haversineM(from, to);
-		return {
-			coords: [from, to],
-			distanceM: d,
-			durationS: profile === "walking" ? d / 1.4 : d / 8,
+		if (!route) return null;
+		const data = {
+			coords: route.geometry.coordinates,
+			distanceM: route.distance,
+			durationS: route.duration,
 		};
+		if (profile === "driving" && !isValidDrivingRoute(data, from, to)) return null;
+		return data;
+	} catch {
+		if (profile === "driving") return null;
+		const d = haversineM(from, to);
+		return { coords: [from, to], distanceM: d, durationS: d / 1.4 };
 	}
+}
+
+const serviceRouteOrigins = (
+	svc: EmergencyService,
+	incident: [number, number],
+): [number, number][] => {
+	const incidentCoord = coordFromTuple(incident);
+	return [
+		tupleFromCoord(sanitizeServiceOrigin(coordFromTuple(svc.coords), incidentCoord, svc.type)),
+	];
+};
+
+async function resolveServiceRoute(
+	svc: EmergencyService,
+	incident: [number, number],
+	token: string,
+): Promise<RouteData | null> {
+	for (const from of serviceRouteOrigins(svc, incident)) {
+		const key = routeKey(from, incident, "driving");
+		const cached = routeCache.get(key);
+		if (cached && isValidDrivingRoute(cached, from, incident)) return cached;
+		const data = await fetchRoute(from, incident, "driving", token);
+		if (!data) continue;
+		routeCache.set(key, data);
+		return data;
+	}
+	return null;
 }
 
 function interpolateRoute(coords: [number, number][], t: number): [number, number] {
@@ -336,15 +417,7 @@ const ETA_SVC_ICON: Record<ServiceType, ReactNode> = {
 	"fire-engine": <Flame  size={22} color={Z.fire} strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
 };
 
-const FloatingStatusCards = ({
-	services,
-	serviceRoutes,
-	serviceProgress,
-}: {
-	services: EmergencyService[];
-	serviceRoutes: Record<string, RouteData>;
-	serviceProgress: Record<string, number>;
-}) => (
+const FloatingStatusCards = ({ services }: { services: EmergencyService[] }) => (
 	<div
 		style={{
 			display: "flex",
@@ -356,11 +429,7 @@ const FloatingStatusCards = ({
 	>
 		{services.map((svc) => {
 			const color = svcColor(svc.type);
-			const route = serviceRoutes[svc.id];
-			const progress = serviceProgress[svc.id] ?? 0;
-			const etaSec = route
-				? route.durationS * (1 - progress)
-				: computeRemainingEtaMinutes(svc) * 60;
+			const etaSec = computeRemainingEtaMinutes(svc) * 60;
 			const etaColor = svc.type === "police" ? Z.police : svc.type === "ambulance" ? Z.ambulance : color;
 			const label = svc.type === "police" ? `Brigade ${svc.callsign}` : `#${svc.callsign}`;
 			return (
@@ -389,9 +458,9 @@ const FloatingStatusCards = ({
 					>
 						{ETA_SVC_ICON[svc.type]}
 					</div>
-					<div style={{ display: "flex", alignItems: "baseline", gap: 6, flexShrink: 0 }}>
-						<span style={{ color: Z.text, fontSize: 15, fontWeight: 400 }}>ETA:</span>
-						<span style={{ color: etaColor, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>
+					<div style={{ display: "flex", alignItems: "baseline", gap: 6, flexShrink: 0, fontSize: 19.8 }}>
+						<span style={{ color: Z.text, fontWeight: 400 }}>ETA :</span>
+						<span style={{ color: etaColor, fontWeight: 400, letterSpacing: "-0.02em" }}>
 							{formatEtaDuration(etaSec)}
 						</span>
 					</div>
@@ -856,10 +925,15 @@ const AllyMarker = ({
 	);
 };
 
+const VEHICLE_SVC_ICON: Record<ServiceType, ReactNode> = {
+	ambulance:     <Cross    size={14} color="#000" strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
+	police:        <Shield   size={14} color="#000" strokeWidth={2} style={{ opacity: ICON_OPACITY }} />,
+	"fire-engine": <Flame    size={14} color="#000" strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
+};
+
 const VehicleMarker = ({ svc, pos }: { svc: EmergencyService; pos: [number, number] }) => {
 	const color = svc.type === "police" ? Z.secondary : svc.type === "ambulance" ? "#fff" : svcColor(svc.type);
 	const bg = svc.type === "ambulance" ? "rgba(255,255,255,0.95)" : color;
-	const labelColor = svc.type === "ambulance" ? Z.bg : "#fff";
 	return (
 		<Marker longitude={pos[0]} latitude={pos[1]} anchor="center">
 			<div
@@ -877,9 +951,7 @@ const VehicleMarker = ({ svc, pos }: { svc: EmergencyService; pos: [number, numb
 					fontFamily: Z.font,
 				}}
 			>
-				<span style={{ color: labelColor, fontSize: 9, fontWeight: 800 }}>
-					{svc.type === "police" ? svc.callsign : `#${svc.callsign}`}
-				</span>
+				{VEHICLE_SVC_ICON[svc.type]}
 			</div>
 		</Marker>
 	);
@@ -922,7 +994,16 @@ const RouteLayer = ({
 					type: "Feature" as const,
 					geometry: {
 						type: "LineString" as const,
-						coordinates: serviceRoutes[svc.id]?.coords ?? [svc.coords, incident.coords],
+						coordinates: serviceRoutes[svc.id]?.coords ?? [
+							tupleFromCoord(
+								sanitizeServiceOrigin(
+									coordFromTuple(svc.coords),
+									coordFromTuple(incident.coords),
+									svc.type,
+								),
+							),
+							incident.coords,
+						],
 					},
 					properties: { routeType: "service", svcType: svc.type },
 				})),
@@ -931,29 +1012,38 @@ const RouteLayer = ({
 		[allies, allyRoutes, services, serviceRoutes, incident, contactedSet],
 	);
 
+	const allyLineWidth = 2;
+	const topAllyLineWidth = allyLineWidth * 1.15;
+
 	return (
 		<Source id="sel-routes" type="geojson" data={data}>
+			<Layer
+				id="sel-ally-routes-glow"
+				type="line"
+				filter={["all", ["==", ["get", "routeType"], "ally"], ["==", ["get", "rank"], 0]]}
+				layout={{ "line-join": "round", "line-cap": "round" }}
+				paint={{
+					"line-color": Z.green,
+					"line-width": topAllyLineWidth + 4,
+					"line-blur": 8,
+					"line-opacity": 0.45,
+					"line-dasharray": [2, 2],
+				}}
+			/>
 			<Layer
 				id="sel-ally-routes"
 				type="line"
 				filter={["==", ["get", "routeType"], "ally"]}
 				layout={{ "line-join": "round", "line-cap": "round" }}
 				paint={{
-					"line-color": [
-						"case",
-						["==", ["get", "contacted"], 1],
-						Z.green,
-						["==", ["get", "rank"], 0],
-						"#ffffff",
-						"#3B82F6",
-					],
-					"line-width": ["case", ["==", ["get", "rank"], 0], 3, 1.8],
+					"line-color": Z.green,
+					"line-width": ["case", ["==", ["get", "rank"], 0], topAllyLineWidth, allyLineWidth],
+					"line-dasharray": [2, 2],
 					"line-opacity": [
 						"case",
-						["==", ["get", "contacted"], 1], 0.95,
-						["==", ["get", "rank"], 0], 0.85,
-						["==", ["get", "rank"], 1], 0.55,
-						0.25,
+						["==", ["get", "rank"], 0], 0.95,
+						["==", ["get", "rank"], 1], 0.7,
+						0.45,
 					],
 				}}
 			/>
@@ -1031,23 +1121,7 @@ const AllyMapPopup = ({
 			}}
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-				<div
-					style={{
-						width: 44,
-						height: 44,
-						borderRadius: "50%",
-						background: avatarColor(ally.name),
-						color: "#fff",
-						fontSize: 14,
-						fontWeight: 700,
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-						flexShrink: 0,
-					}}
-				>
-					{allyInitials(ally.name)}
-				</div>
+				<AllyAvatar ally={ally} size={44} />
 				<div style={{ minWidth: 0 }}>
 					<div style={{ color: Z.text, fontSize: 14, fontWeight: 400 }}>{ally.name}</div>
 					<div style={{ color: Z.muted, fontSize: 11, marginTop: 2 }}>
@@ -1321,23 +1395,7 @@ const AllyResponderCard = ({
 			marginBottom: 8,
 		}}
 	>
-		<div
-			style={{
-				width: 40,
-				height: 40,
-				borderRadius: "50%",
-				background: avatarColor(ally.name),
-				color: "#fff",
-				fontSize: 13,
-				fontWeight: 700,
-				display: "flex",
-				alignItems: "center",
-				justifyContent: "center",
-				flexShrink: 0,
-			}}
-		>
-			{allyInitials(ally.name)}
-		</div>
+		<AllyAvatar ally={ally} size={40} />
 		<div style={{ flex: 1, minWidth: 0 }}>
 			<div style={{ color: contacted ? Z.green : Z.text, fontSize: 13, fontWeight: 400 }}>
 				{ally.name}
@@ -1474,22 +1532,15 @@ export const SoteriaMap = () => {
 				continue;
 			}
 			fetchRoute(ally.coords, incident.coords, "walking", token).then((data) => {
-				if (selectedIdRef.current !== selectedId) return;
+				if (!data || selectedIdRef.current !== selectedId) return;
 				routeCache.set(key, data);
 				setAllyRoutes((prev) => ({ ...prev, [ally.id]: data }));
 			});
 		}
 
 		for (const svc of incident.emergencyServices) {
-			const key = routeKey(svc.coords, incident.coords, "driving");
-			const cached = routeCache.get(key);
-			if (cached) {
-				setServiceRoutes((prev) => ({ ...prev, [svc.id]: cached }));
-				continue;
-			}
-			fetchRoute(svc.coords, incident.coords, "driving", token).then((data) => {
-				if (selectedIdRef.current !== selectedId) return;
-				routeCache.set(key, data);
+			resolveServiceRoute(svc, incident.coords, token).then((data) => {
+				if (!data || selectedIdRef.current !== selectedId) return;
 				setServiceRoutes((prev) => ({ ...prev, [svc.id]: data }));
 			});
 		}
@@ -1560,7 +1611,7 @@ export const SoteriaMap = () => {
 			address: hotspot.name,
 			receivedAt,
 			callerPhone: `+852 9${Math.floor(Math.random() * 9000000 + 1000000)}`,
-			emergencyServices: createEmergencyServices([hotspot.lng, hotspot.lat], type, receivedAt),
+			emergencyServices: createEmergencyServices([hotspot.lng, hotspot.lat], type, Date.now()),
 			contactedAllyIds: [],
 			handled: false,
 			source: "operator",
@@ -1605,11 +1656,7 @@ export const SoteriaMap = () => {
 						}}
 					>
 						{selectedIncident && (
-							<FloatingStatusCards
-								services={selectedIncident.emergencyServices}
-								serviceRoutes={serviceRoutes}
-								serviceProgress={serviceProgress}
-							/>
+							<FloatingStatusCards services={selectedIncident.emergencyServices} />
 						)}
 
 						<div
@@ -1715,10 +1762,17 @@ export const SoteriaMap = () => {
 
 						{selectedIncident &&
 							selectedIncident.emergencyServices.map((svc) => {
-								const coords = serviceRoutes[svc.id]?.coords ?? null;
-								const pos = coords
-									? interpolateRoute(coords, serviceProgress[svc.id] ?? 0)
-									: svc.coords;
+								const route = serviceRoutes[svc.id];
+								const fallback = tupleFromCoord(
+									sanitizeServiceOrigin(
+										coordFromTuple(svc.coords),
+										coordFromTuple(selectedIncident.coords),
+										svc.type,
+									),
+								);
+								const pos = route?.coords?.length
+									? interpolateRoute(route.coords, serviceProgress[svc.id] ?? 0)
+									: fallback;
 								return <VehicleMarker key={svc.id} svc={svc} pos={pos} />;
 							})}
 						</MapGL>
