@@ -40,7 +40,7 @@ export const OnboardingLayout = ({ phase, children }: OnboardingLayoutProps) => 
 						<div
 							key={s}
 							className={`h-1.5 flex-1 rounded-full transition-colors ${
-								s <= phase ? "bg-teal" : "bg-navy/10"
+								s <= phase ? "bg-navy" : "bg-navy/10"
 							}`}
 						/>
 					))}

@@ -5,11 +5,11 @@ import { OnboardingLayout } from "~/components/onboarding-layout";
 import { useSession } from "~/lib/session";
 import type { User } from "~/lib/types";
 
-type AuthPhase = "auth" | "display-name";
+type AuthPhase = "auth" | "name";
 
-const mockOAuthName: Record<"google" | "apple", string> = {
-	google: "Alex Morgan",
-	apple: "Jordan Lee",
+const mockOAuthNames: Record<"google" | "apple", { firstName: string; lastName: string }> = {
+	google: { firstName: "Alex", lastName: "Morgan" },
+	apple: { firstName: "Jordan", lastName: "Lee" },
 };
 
 export const RegisterPage = () => {
@@ -19,7 +19,8 @@ export const RegisterPage = () => {
 	const [showEmail, setShowEmail] = useState(false);
 	const [email, setEmail] = useState("");
 	const [magicLinkSent, setMagicLinkSent] = useState(false);
-	const [displayName, setDisplayName] = useState(session.pendingDisplayName);
+	const [firstName, setFirstName] = useState(session.pendingFirstName);
+	const [lastName, setLastName] = useState(session.pendingLastName);
 
 	useEffect(() => {
 		if (!session.user) return;
@@ -31,32 +32,37 @@ export const RegisterPage = () => {
 
 	const startOAuth = (provider: "google" | "apple") => {
 		// TODO: POST to /api/auth/oauth
-		setDisplayName(mockOAuthName[provider]);
-		update({ authProvider: provider, pendingDisplayName: mockOAuthName[provider] });
-		setPhase("display-name");
+		const { firstName: first, lastName: last } = mockOAuthNames[provider];
+		setFirstName(first);
+		setLastName(last);
+		update({ authProvider: provider, pendingFirstName: first, pendingLastName: last });
+		setPhase("name");
 	};
 
 	const sendMagicLink = () => {
 		if (!email.trim()) return;
 		// TODO: POST to /api/auth/magic-link
+		const first = email.split("@")[0];
 		setMagicLinkSent(true);
-		update({ authProvider: "email", pendingDisplayName: email.split("@")[0] });
-		setDisplayName(email.split("@")[0]);
-		setPhase("display-name");
+		update({ authProvider: "email", pendingFirstName: first, pendingLastName: "" });
+		setFirstName(first);
+		setLastName("");
+		setPhase("name");
 	};
 
 	const createAccount = () => {
-		const name = displayName.trim();
-		if (!name) return;
+		const first = firstName.trim();
+		const last = lastName.trim();
+		if (!first || !last) return;
 		const user: User = {
 			id: crypto.randomUUID(),
-			displayName: name,
+			firstName: first,
+			lastName: last,
 			email: session.authProvider === "email" ? email.trim() : undefined,
-			accountStatus: "unverified",
 			createdAt: new Date().toISOString(),
 		};
 		// TODO: POST to /api/register
-		update({ user, pendingDisplayName: name });
+		update({ user, pendingFirstName: first, pendingLastName: last });
 		navigate("/register/skills");
 	};
 
@@ -102,7 +108,7 @@ export const RegisterPage = () => {
 						<button
 							type="button"
 							onClick={() => setShowEmail(true)}
-							className="text-sm font-medium text-teal"
+							className="text-sm font-medium text-navy/70"
 							aria-label="use email instead"
 						>
 							Use email instead
@@ -123,14 +129,14 @@ export const RegisterPage = () => {
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 								placeholder="you@example.com"
-								className="w-full rounded-xl border border-teal/30 bg-white px-3 py-3 text-base text-navy outline-none focus:border-teal"
+								className="w-full rounded-xl border border-navy/20 bg-white px-3 py-3 text-base text-navy outline-none focus:border-navy"
 								aria-label="email address"
 							/>
 							<button
 								type="button"
 								onClick={sendMagicLink}
 								disabled={!email.trim()}
-								className="min-h-14 w-full rounded-2xl bg-teal font-semibold text-white disabled:opacity-40"
+								className="min-h-14 w-full rounded-2xl bg-navy font-semibold text-white disabled:opacity-40"
 								aria-label="send magic link"
 							>
 								{magicLinkSent ? "Link sent — check your email" : "Send magic link"}
@@ -141,33 +147,48 @@ export const RegisterPage = () => {
 			) : (
 				<div className="flex flex-col gap-6">
 					<div>
-						<h1 className="mb-2 text-2xl font-bold text-navy">What should we call you?</h1>
+						<h1 className="mb-2 text-2xl font-bold text-navy">Your name</h1>
 						<p className="text-sm text-muted">
-							This is how operators and other responders will see you.
+							Operators will see this on the dashboard when you're dispatched.
 						</p>
 					</div>
-					<div className="rounded-2xl bg-card p-4">
+					<div className="flex flex-col gap-3 rounded-2xl bg-card p-4">
 						<label
-							htmlFor="display-name"
-							className="mb-2 block text-xs font-medium tracking-wide text-muted uppercase"
+							htmlFor="first-name"
+							className="text-xs font-medium tracking-wide text-muted uppercase"
 						>
-							Display name
+							First name
 						</label>
 						<input
-							id="display-name"
+							id="first-name"
 							type="text"
-							autoComplete="name"
-							value={displayName}
-							onChange={(e) => setDisplayName(e.target.value)}
-							className="w-full rounded-xl border border-teal/30 bg-white px-3 py-3 text-base text-navy outline-none focus:border-teal"
-							aria-label="display name"
+							autoComplete="given-name"
+							value={firstName}
+							onChange={(e) => setFirstName(e.target.value)}
+							className="w-full rounded-xl border border-navy/20 bg-white px-3 py-3 text-base text-navy outline-none focus:border-navy"
+							aria-label="first name"
+						/>
+						<label
+							htmlFor="last-name"
+							className="text-xs font-medium tracking-wide text-muted uppercase"
+						>
+							Last name
+						</label>
+						<input
+							id="last-name"
+							type="text"
+							autoComplete="family-name"
+							value={lastName}
+							onChange={(e) => setLastName(e.target.value)}
+							className="w-full rounded-xl border border-navy/20 bg-white px-3 py-3 text-base text-navy outline-none focus:border-navy"
+							aria-label="last name"
 						/>
 					</div>
 					<button
 						type="button"
 						onClick={createAccount}
-						disabled={!displayName.trim()}
-						className="min-h-14 w-full rounded-2xl bg-teal font-semibold text-white disabled:opacity-40"
+						disabled={!firstName.trim() || !lastName.trim()}
+						className="min-h-14 w-full rounded-2xl bg-navy font-semibold text-white disabled:opacity-40"
 						aria-label="create account and continue"
 					>
 						Continue →

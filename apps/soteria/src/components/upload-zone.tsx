@@ -8,6 +8,7 @@ type UploadZoneProps = {
 	preview: string | null;
 	isPdf?: boolean;
 	optional?: boolean;
+	optionalLabel?: string;
 	onUpload: (dataUrl: string, isPdf: boolean) => void;
 	onSkip?: () => void;
 	onError: (message: string) => void;
@@ -26,6 +27,7 @@ export const UploadZone = ({
 	preview,
 	isPdf,
 	optional,
+	optionalLabel = "Add proof (optional)",
 	onUpload,
 	onSkip,
 	onError,
@@ -53,13 +55,13 @@ export const UploadZone = ({
 		<div className={`rounded-2xl p-4 ${optional ? "bg-white" : "bg-card"}`}>
 			<div className="mb-3 flex items-center justify-between">
 				<p className={`text-sm font-medium ${optional ? "text-muted" : "text-navy"}`}>
-					{optional ? "Add proof (optional)" : label}
+					{optional ? optionalLabel : label}
 				</p>
 				{optional && !preview && onSkip && (
 					<button
 						type="button"
 						onClick={onSkip}
-						className="text-sm font-medium text-teal"
+						className="text-sm font-medium text-navy/70"
 						aria-label={`skip upload for ${label}`}
 					>
 						Skip for now
@@ -88,7 +90,7 @@ export const UploadZone = ({
 					<button
 						type="button"
 						onClick={() => inputRef.current?.click()}
-						className="text-sm font-medium text-teal"
+						className="text-sm font-medium text-navy/70"
 						aria-label={`replace ${label}`}
 					>
 						Replace file
@@ -100,8 +102,8 @@ export const UploadZone = ({
 					onClick={() => inputRef.current?.click()}
 					className={`flex min-h-[120px] w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed bg-white transition-colors ${
 						optional
-							? "border-navy/15 text-muted hover:border-teal/40 hover:bg-teal/5"
-							: "border-teal/40 hover:border-teal hover:bg-teal/5"
+							? "border-navy/15 text-muted hover:border-navy/30 hover:bg-navy/5"
+							: "border-navy/25 hover:border-navy/50 hover:bg-navy/5"
 					}`}
 					aria-label={`upload ${label}`}
 				>
