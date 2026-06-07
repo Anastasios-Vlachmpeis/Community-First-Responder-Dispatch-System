@@ -2,7 +2,8 @@ import { pickRandomPicture } from "~/data/allyPictures";
 import { HK_BOUNDS } from "~/config/hk";
 import { CERTIFICATION_TYPES } from "~/domain/certLabels";
 import { skillsFromCertifications } from "~/domain/certToSkills";
-import type { Ally, Certification } from "~/domain/types";
+import type { Ally, Certification, Coord } from "~/domain/types";
+import { isLandCoord, randomLandCoord, tupleFromCoord } from "~/lib/geo";
 
 export const ALLY_POOL_SIZE = 5000;
 export const ALLY_SEED = 42;
@@ -45,8 +46,18 @@ export const generateAllies = (count = ALLY_POOL_SIZE, seed = ALLY_SEED): Ally[]
 	for (let i = 0; i < count; i++) {
 		const row = Math.floor(i / cols);
 		const col = i % cols;
-		const lat = HK_BOUNDS.minLat + latStep * (row + 0.5) + (rng() - 0.5) * latStep * 0.6;
-		const lng = HK_BOUNDS.minLng + lngStep * (col + 0.5) + (rng() - 0.5) * lngStep * 0.6;
+		let coord: Coord | null = null;
+		for (let attempt = 0; attempt < 48; attempt++) {
+			const candidate = {
+				lat: HK_BOUNDS.minLat + latStep * (row + 0.5) + (rng() - 0.5) * latStep * 0.8,
+				lng: HK_BOUNDS.minLng + lngStep * (col + 0.5) + (rng() - 0.5) * lngStep * 0.8,
+			};
+			if (isLandCoord(candidate)) {
+				coord = candidate;
+				break;
+			}
+		}
+		if (!coord) coord = randomLandCoord(rng);
 		const hasCerts = rng() < 0.3;
 		const certifications: Certification[] = [];
 
@@ -77,7 +88,7 @@ export const generateAllies = (count = ALLY_POOL_SIZE, seed = ALLY_SEED): Ally[]
 			name: `${pick(rng, FIRST_NAMES)} ${pick(rng, LAST_NAMES)}`,
 			phone: formatPhone(rng),
 			skills,
-			coords: [lng, lat],
+			coords: tupleFromCoord(coord),
 			credentialScore: Math.floor(rng() * 35) + 55,
 			certifications: hasCerts ? certifications : undefined,
 			pictureUrl: pickRandomPicture(rng),

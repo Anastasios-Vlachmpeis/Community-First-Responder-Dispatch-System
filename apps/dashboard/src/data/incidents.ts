@@ -1,5 +1,6 @@
 import { capDispatchAgeMs } from "~/data/dispatch";
 import type { EmergencyService, Incident } from "~/domain/types";
+import { sanitizeTupleToLand } from "~/lib/geo";
 
 type SeedService = Omit<EmergencyService, "createdAt"> & { dispatchAgeMs: number };
 
@@ -146,9 +147,11 @@ export const getSeedIncidents = (): Incident[] => {
 		const minEta = Math.min(...inc.emergencyServices.map((svc) => svc.etaMinutes));
 		return {
 			...inc,
+			coords: sanitizeTupleToLand(inc.coords),
 			receivedAt: now - capDispatchAgeMs(inc.receivedAgeMs, minEta),
 			emergencyServices: inc.emergencyServices.map(({ dispatchAgeMs, ...svc }) => ({
 				...svc,
+				coords: sanitizeTupleToLand(svc.coords),
 				createdAt: now - capDispatchAgeMs(dispatchAgeMs, svc.etaMinutes),
 			})),
 			allyStatuses: { ...inc.allyStatuses },

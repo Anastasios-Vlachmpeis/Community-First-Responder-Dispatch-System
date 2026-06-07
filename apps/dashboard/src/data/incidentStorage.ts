@@ -1,4 +1,5 @@
 import type { AllyResponseStatus, Incident } from "~/domain/types";
+import { sanitizeTupleToLand } from "~/lib/geo";
 
 const STORAGE_KEY = "soteria-incidents";
 
@@ -19,6 +20,11 @@ const migrateAllyStatuses = (inc: PersistedIncident): Partial<Record<string, All
 
 const normalize = (inc: PersistedIncident): Incident => ({
 	...inc,
+	coords: sanitizeTupleToLand(inc.coords),
+	emergencyServices: inc.emergencyServices.map((svc) => ({
+		...svc,
+		coords: sanitizeTupleToLand(svc.coords),
+	})),
 	allyStatuses: migrateAllyStatuses(inc),
 	handled: inc.handled ?? false,
 	source: inc.source ?? "operator",

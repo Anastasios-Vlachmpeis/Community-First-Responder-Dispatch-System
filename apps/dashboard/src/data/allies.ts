@@ -1,6 +1,7 @@
 import { pickRandomPicture } from "~/data/allyPictures";
 import { generateAllies } from "~/data/generateAllies";
 import type { Ally, Certification, IncidentType } from "~/domain/types";
+import { sanitizeTupleToLand } from "~/lib/geo";
 
 const mulberry32 = (seed: number) => {
 	let s = seed;
@@ -132,6 +133,7 @@ export const getAllyPool = (): Ally[] => {
 	const seedRng = mulberry32(7);
 	const withPicture = (ally: Omit<Ally, "pictureUrl">): Ally => ({
 		...ally,
+		coords: sanitizeTupleToLand(ally.coords),
 		pictureUrl: pickRandomPicture(seedRng),
 	});
 	const seedIds = new Set(SEED_ALLIES.map((a) => a.id));

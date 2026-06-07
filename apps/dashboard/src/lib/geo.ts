@@ -7,18 +7,18 @@ const inBox = ({ lat, lng }: Coord, box: Box) =>
 	lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng;
 
 const WATER_ZONES: Box[] = [
-	{ minLat: 22.279, maxLat: 22.302, minLng: 114.162, maxLng: 114.182 },
-	{ minLat: 22.272, maxLat: 22.294, minLng: 114.118, maxLng: 114.162 },
-	{ minLat: 22.296, maxLat: 22.318, minLng: 114.192, maxLng: 114.222 },
-	{ minLat: 22.18, maxLat: 22.275, minLng: 114.3, maxLng: 114.42 },
+	{ minLat: 22.2835, maxLat: 22.2935, minLng: 114.155, maxLng: 114.175 },
+	{ minLat: 22.275, maxLat: 22.288, minLng: 114.128, maxLng: 114.155 },
+	{ minLat: 22.286, maxLat: 22.295, minLng: 114.175, maxLng: 114.198 },
+	{ minLat: 22.298, maxLat: 22.315, minLng: 114.198, maxLng: 114.228 },
+	{ minLat: 22.26, maxLat: 22.3, minLng: 114.24, maxLng: 114.32 },
+	{ minLat: 22.18, maxLat: 22.27, minLng: 114.28, maxLng: 114.42 },
 	{ minLat: 22.36, maxLat: 22.48, minLng: 113.83, maxLng: 113.95 },
+	{ minLat: 22.15, maxLat: 22.26, minLng: 114.05, maxLng: 114.22 },
+	{ minLat: 22.22, maxLat: 22.36, minLng: 113.83, maxLng: 114.02 },
 ];
 
-const SHORE_LAND: Box[] = [
-	{ minLat: 22.294, maxLat: 22.34, minLng: 114.158, maxLng: 114.185 },
-	{ minLat: 22.265, maxLat: 22.288, minLng: 114.15, maxLng: 114.22 },
-	{ minLat: 22.278, maxLat: 22.29, minLng: 114.148, maxLng: 114.158 },
-];
+const LAND_FALLBACK: Coord = { lat: 22.3193, lng: 114.1694 };
 
 export const coordFromTuple = ([lng, lat]: [number, number]): Coord => ({ lat, lng });
 
@@ -34,8 +34,37 @@ export const isLandCoord = (coord: Coord): boolean => {
 	if (!isWithinHkBounds(coord)) return false;
 	if (coord.lat > 22.52) return false;
 	if (coord.lng < 113.9 && coord.lat > 22.42) return false;
-	if (SHORE_LAND.some((box) => inBox(coord, box))) return true;
 	return !WATER_ZONES.some((box) => inBox(coord, box));
+};
+
+export const sanitizeToLand = (coord: Coord): Coord => {
+	if (isLandCoord(coord)) return coord;
+	for (let ring = 1; ring <= 50; ring++) {
+		const km = ring * 0.15;
+		for (let i = 0; i < 24; i++) {
+			const angle = (i / 24) * 2 * Math.PI;
+			const candidate = {
+				lat: coord.lat + (km / 111) * Math.cos(angle),
+				lng: coord.lng + (km / (111 * Math.cos((coord.lat * Math.PI) / 180))) * Math.sin(angle),
+			};
+			if (isLandCoord(candidate)) return candidate;
+		}
+	}
+	return LAND_FALLBACK;
+};
+
+export const sanitizeTupleToLand = ([lng, lat]: [number, number]): [number, number] =>
+	tupleFromCoord(sanitizeToLand({ lat, lng }));
+
+export const randomLandCoord = (rng: () => number = Math.random): Coord => {
+	for (let i = 0; i < 64; i++) {
+		const candidate = {
+			lat: HK_BOUNDS.minLat + rng() * (HK_BOUNDS.maxLat - HK_BOUNDS.minLat),
+			lng: HK_BOUNDS.minLng + rng() * (HK_BOUNDS.maxLng - HK_BOUNDS.minLng),
+		};
+		if (isLandCoord(candidate)) return candidate;
+	}
+	return LAND_FALLBACK;
 };
 
 export const haversineKm = (a: Coord, b: Coord): number => {
