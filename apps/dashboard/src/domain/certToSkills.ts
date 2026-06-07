@@ -26,6 +26,12 @@ export const CERT_TO_SKILLS: Record<CertificationType, IncidentType[]> = {
 		"robbery",
 		"suicide-attempt",
 	],
+	law_enforcement_background: ["assault", "robbery", "traffic-accident", "suicide-attempt"],
+	military_veteran: ["assault", "robbery", "traffic-accident", "suicide-attempt"],
+	retired_firefighter: ["building-fire", "gas-leak", "vehicle-fire"],
+	licensed_security: ["assault", "robbery"],
+	crisis_negotiation: ["suicide-attempt", "mental-health-crisis"],
+	off_duty_paramedic: ["traffic-accident", "cardiac-arrest", "severe-bleeding"],
 	other: ["language-barrier"],
 };
 

@@ -1,5 +1,9 @@
 import { pickRandomPicture } from "~/data/allyPictures";
-import { generateAllies } from "~/data/generateAllies";
+import {
+	ALLY_EXTRA_SEED,
+	ALLY_EXTRA_UNCREDENTIALLED_SIZE,
+	generateAllies,
+} from "~/data/generateAllies";
 import type { Ally, Certification, IncidentType } from "~/domain/types";
 import { sanitizeTupleToLand } from "~/lib/geo";
 
@@ -130,16 +134,21 @@ let pool: Ally[] | null = null;
 
 export const getAllyPool = (): Ally[] => {
 	if (pool) return pool;
-	const seedRng = mulberry32(7);
-	const withPicture = (ally: Omit<Ally, "pictureUrl">): Ally => ({
+	const pictureRng = mulberry32(7);
+	const withRandomPicture = (ally: Omit<Ally, "pictureUrl">): Ally => ({
 		...ally,
 		coords: sanitizeTupleToLand(ally.coords),
-		pictureUrl: pickRandomPicture(seedRng),
+		pictureUrl: pickRandomPicture(pictureRng),
 	});
 	const seedIds = new Set(SEED_ALLIES.map((a) => a.id));
 	pool = [
-		...SEED_ALLIES.map(withPicture),
-		...generateAllies().filter((a) => !seedIds.has(a.id)),
+		...SEED_ALLIES.map(withRandomPicture),
+		...generateAllies()
+			.filter((a) => !seedIds.has(a.id))
+			.map(withRandomPicture),
+		...generateAllies(ALLY_EXTRA_UNCREDENTIALLED_SIZE, ALLY_EXTRA_SEED, { uncredentialledOnly: true }).map(
+			withRandomPicture,
+		),
 	];
 	return pool;
 };

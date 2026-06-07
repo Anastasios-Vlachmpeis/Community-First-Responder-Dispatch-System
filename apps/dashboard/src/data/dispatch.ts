@@ -2,7 +2,7 @@ import { DEMO_TIME_SCALE } from "~/config/hk";
 import { STATIONS } from "~/data/stations";
 import { INCIDENT_SERVICES } from "~/domain/incidentServices";
 import type { Coord, EmergencyService, IncidentType, ServiceType, Station } from "~/domain/types";
-import { haversineKm, isLandCoord, tupleFromCoord } from "~/lib/geo";
+import { haversineKm, isLandCoord, sanitizeToLand, tupleFromCoord } from "~/lib/geo";
 
 const URBAN_KMH = 28;
 const ETA_MIN_MINUTES = 5;
@@ -35,9 +35,9 @@ const randomInBand = (): Coord => {
 			lat: CENTRAL_BAND.minLat + Math.random() * (CENTRAL_BAND.maxLat - CENTRAL_BAND.minLat),
 			lng: CENTRAL_BAND.minLng + Math.random() * (CENTRAL_BAND.maxLng - CENTRAL_BAND.minLng),
 		};
-		if (isLandCoord(candidate)) return candidate;
+		if (isLandCoord(candidate)) return sanitizeToLand(candidate);
 	}
-	return { lat: 22.32, lng: 114.17 };
+	return sanitizeToLand({ lat: 22.32, lng: 114.17 });
 };
 
 /** keep two incidents at least this far apart so none ever spawn on the same spot */
@@ -48,9 +48,9 @@ export const randomIncidentCoord = (existing: Coord[]): Coord => {
 	for (let i = 0; i < 60; i++) {
 		const candidate = randomInBand();
 		if (existing.every((e) => haversineKm(e, candidate) >= MIN_INCIDENT_SEPARATION_KM))
-			return candidate;
+			return sanitizeToLand(candidate);
 	}
-	return randomInBand();
+	return sanitizeToLand(randomInBand());
 };
 
 const projectCoord = (origin: Coord, distKm: number, bearingRad: number): Coord => ({
@@ -62,7 +62,7 @@ const fieldOrigin = (incident: Coord): Coord => {
 	for (let i = 0; i < 32; i++) {
 		const candidate = randomInBand();
 		const d = haversineKm(incident, candidate);
-		if (d >= MIN_ORIGIN_KM && d <= MAX_FIELD_KM && isLandCoord(candidate)) return candidate;
+		if (d >= MIN_ORIGIN_KM && d <= MAX_FIELD_KM && isLandCoord(candidate)) return sanitizeToLand(candidate);
 	}
 	for (let i = 0; i < 16; i++) {
 		const pushed = projectCoord(incident, MIN_ORIGIN_KM + 1.5, Math.random() * 2 * Math.PI);
@@ -70,9 +70,9 @@ const fieldOrigin = (incident: Coord): Coord => {
 			lat: clamp(pushed.lat, CENTRAL_BAND.minLat, CENTRAL_BAND.maxLat),
 			lng: clamp(pushed.lng, CENTRAL_BAND.minLng, CENTRAL_BAND.maxLng),
 		};
-		if (isLandCoord(clamped)) return clamped;
+		if (isLandCoord(clamped)) return sanitizeToLand(clamped);
 	}
-	return randomInBand();
+	return sanitizeToLand(randomInBand());
 };
 
 const nearestStationBeyond = (incident: Coord, service: ServiceType): Station | null => {
@@ -94,9 +94,9 @@ const jitterAroundStation = (station: Coord): Coord => {
 			lat: station.lat + (Math.random() - 0.5) * 0.0036,
 			lng: station.lng + (Math.random() - 0.5) * 0.0036,
 		};
-		if (isLandCoord(jittered)) return jittered;
+		if (isLandCoord(jittered)) return sanitizeToLand(jittered);
 	}
-	return station;
+	return sanitizeToLand(station);
 };
 
 export const nearestLandStation = (incident: Coord, service: ServiceType): Station | null => {
@@ -153,7 +153,7 @@ export const createEmergencyServices = (
 			id: crypto.randomUUID(),
 			type,
 			callsign: nextCallsign(type),
-			coords: tupleFromCoord(from),
+			coords: tupleFromCoord(sanitizeToLand(from)),
 			etaMinutes: estimateEtaMinutes(from, incidentCoord),
 			createdAt,
 			arrived: false,

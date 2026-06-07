@@ -6,7 +6,7 @@ const STORAGE_KEY = "soteria-incidents";
 
 const incidentDisplayId = (id: string) => id.replace(/-/g, "").slice(-4).toUpperCase();
 
-const REMOVED_INCIDENT_DISPLAY_IDS = new Set(["E542"]);
+const REMOVED_INCIDENT_DISPLAY_IDS = new Set(["E542", "80F0", "92FF", "A379", "0003"]);
 
 const isRemovedIncident = (id: string) => REMOVED_INCIDENT_DISPLAY_IDS.has(incidentDisplayId(id));
 

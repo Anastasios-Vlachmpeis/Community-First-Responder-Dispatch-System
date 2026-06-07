@@ -10,12 +10,15 @@ const WATER_ZONES: Box[] = [
 	{ minLat: 22.2835, maxLat: 22.2935, minLng: 114.155, maxLng: 114.175 },
 	{ minLat: 22.275, maxLat: 22.288, minLng: 114.128, maxLng: 114.155 },
 	{ minLat: 22.286, maxLat: 22.295, minLng: 114.175, maxLng: 114.198 },
+	{ minLat: 22.2845, maxLat: 22.2935, minLng: 114.168, maxLng: 114.198 },
+	{ minLat: 22.278, maxLat: 22.288, minLng: 114.14, maxLng: 114.162 },
 	{ minLat: 22.298, maxLat: 22.315, minLng: 114.198, maxLng: 114.228 },
 	{ minLat: 22.26, maxLat: 22.3, minLng: 114.24, maxLng: 114.32 },
 	{ minLat: 22.18, maxLat: 22.27, minLng: 114.28, maxLng: 114.42 },
 	{ minLat: 22.36, maxLat: 22.48, minLng: 113.83, maxLng: 113.95 },
 	{ minLat: 22.15, maxLat: 22.26, minLng: 114.05, maxLng: 114.22 },
 	{ minLat: 22.22, maxLat: 22.36, minLng: 113.83, maxLng: 114.02 },
+	{ minLat: 22.27, maxLat: 22.34, minLng: 114.22, maxLng: 114.4 },
 ];
 
 const LAND_FALLBACK: Coord = { lat: 22.3193, lng: 114.1694 };

@@ -43,7 +43,7 @@ import {
 	routeFetchCandidates,
 	type RankedAlly,
 } from "~/features/recommender/rankAllies";
-import { coordFromTuple, tupleFromCoord } from "~/lib/geo";
+import { coordFromTuple, sanitizeTupleToLand, tupleFromCoord } from "~/lib/geo";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -2020,7 +2020,7 @@ export const SoteriaMap = () => {
 		const type = INCIDENT_TYPES[Math.floor(Math.random() * INCIDENT_TYPES.length)]!;
 		// random on-land spot, kept clear of every existing incident (never the same position twice)
 		const c = randomIncidentCoord(incidents.map((i) => ({ lat: i.coords[1], lng: i.coords[0] })));
-		const coords: [number, number] = [c.lng, c.lat];
+		const coords = sanitizeTupleToLand([c.lng, c.lat]);
 		const incident: Incident = {
 			id: crypto.randomUUID(),
 			type,

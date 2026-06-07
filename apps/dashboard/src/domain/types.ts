@@ -33,6 +33,12 @@ export type CertificationType =
 	| "fire_safety"
 	| "road_accident_response"
 	| "mental_health_first_aid"
+	| "law_enforcement_background"
+	| "military_veteran"
+	| "retired_firefighter"
+	| "licensed_security"
+	| "crisis_negotiation"
+	| "off_duty_paramedic"
 	| "other";
 
 export type Certification = {

@@ -1,12 +1,15 @@
-import { pickRandomPicture } from "~/data/allyPictures";
 import { HK_BOUNDS } from "~/config/hk";
-import { CERTIFICATION_TYPES } from "~/domain/certLabels";
+import { CERTIFICATION_TYPES, NEW_CERTIFICATION_TYPES } from "~/domain/certLabels";
 import { skillsFromCertifications } from "~/domain/certToSkills";
-import type { Ally, Certification, Coord } from "~/domain/types";
-import { isLandCoord, randomLandCoord, tupleFromCoord } from "~/lib/geo";
+import type { Ally, Certification, CertificationType, Coord } from "~/domain/types";
+import { isLandCoord, randomLandCoord, sanitizeToLand, tupleFromCoord } from "~/lib/geo";
 
 export const ALLY_POOL_SIZE = 5000;
 export const ALLY_SEED = 42;
+export const ALLY_EXTRA_UNCREDENTIALLED_SIZE = 2000;
+export const ALLY_EXTRA_SEED = 43;
+const CREDENTIALLED_RATE = 0.3;
+const NON_CREDENTIALLED_NEW_CERT_RATE = 0.22;
 
 const FIRST_NAMES = [
 	"Wing", "Ka", "Ho", "Man", "Ying", "Chi", "Mei", "Kit", "Sum", "Wai",
@@ -17,6 +20,8 @@ const LAST_NAMES = [
 	"Chan", "Wong", "Lee", "Lam", "Cheung", "Ng", "Leung", "Tang", "Ho", "Yip",
 	"Cheng", "Chow", "Tsang", "Kwok", "Tam", "Au", "Fung", "Ma", "Yuen", "Lo",
 ];
+
+const OTHER_CERT_LABELS = ["Community First Aid", "Red Cross Volunteer", "Multilingual Support"];
 
 const mulberry32 = (seed: number) => {
 	let s = seed;
@@ -35,13 +40,48 @@ const pick = <T>(rng: () => number, items: T[]): T =>
 const formatPhone = (rng: () => number): string =>
 	`+8529${Math.floor(rng() * 9000000 + 1000000)}`;
 
-export const generateAllies = (count = ALLY_POOL_SIZE, seed = ALLY_SEED): Ally[] => {
+const pickCertifications = (
+	rng: () => number,
+	seed: number,
+	index: number,
+	types: CertificationType[],
+	minCount: number,
+	maxCount: number,
+): Certification[] => {
+	const certCount = Math.floor(rng() * (maxCount - minCount + 1)) + minCount;
+	const pool = [...types];
+	const res: Certification[] = [];
+	for (let j = 0; j < certCount; j++) {
+		const idx = Math.floor(rng() * pool.length);
+		const type = pool.splice(idx, 1)[0];
+		if (!type) break;
+		res.push({
+			id: `cert-${seed}-${index}-${j}`,
+			type,
+			customLabel: type === "other" ? pick(rng, OTHER_CERT_LABELS) : undefined,
+			verified: rng() < 0.7,
+		});
+	}
+	return res;
+};
+
+export type GenerateAlliesOpts = {
+	uncredentialledOnly?: boolean;
+};
+
+export type GeneratedAlly = Omit<Ally, "pictureUrl">;
+
+export const generateAllies = (
+	count = ALLY_POOL_SIZE,
+	seed = ALLY_SEED,
+	opts?: GenerateAlliesOpts,
+): GeneratedAlly[] => {
 	const rng = mulberry32(seed);
 	const cols = Math.ceil(Math.sqrt(count * 1.2));
 	const rows = Math.ceil(count / cols);
 	const latStep = (HK_BOUNDS.maxLat - HK_BOUNDS.minLat) / rows;
 	const lngStep = (HK_BOUNDS.maxLng - HK_BOUNDS.minLng) / cols;
-	const res: Ally[] = [];
+	const res: GeneratedAlly[] = [];
 
 	for (let i = 0; i < count; i++) {
 		const row = Math.floor(i / cols);
@@ -58,30 +98,19 @@ export const generateAllies = (count = ALLY_POOL_SIZE, seed = ALLY_SEED): Ally[]
 			}
 		}
 		if (!coord) coord = randomLandCoord(rng);
-		const hasCerts = rng() < 0.3;
-		const certifications: Certification[] = [];
+		coord = sanitizeToLand(coord);
 
-		if (hasCerts) {
-			const certCount = Math.floor(rng() * 3) + 1;
-			const types = [...CERTIFICATION_TYPES];
-			for (let j = 0; j < certCount; j++) {
-				const idx = Math.floor(rng() * types.length);
-				const type = types.splice(idx, 1)[0];
-				if (!type) break;
-				certifications.push({
-					id: `cert-${seed}-${i}-${j}`,
-					type,
-					customLabel:
-						type === "other"
-							? pick(rng, ["Community First Aid", "Red Cross Volunteer", "Multilingual Support"])
-							: undefined,
-					verified: rng() < 0.7,
-				});
+		let certifications: Certification[] | undefined;
+		if (!opts?.uncredentialledOnly) {
+			if (rng() < CREDENTIALLED_RATE) {
+				certifications = pickCertifications(rng, seed, i, CERTIFICATION_TYPES, 1, 3);
+			} else if (rng() < NON_CREDENTIALLED_NEW_CERT_RATE) {
+				certifications = pickCertifications(rng, seed, i, NEW_CERTIFICATION_TYPES, 1, 2);
 			}
 		}
 
-		const certTypes = certifications.map((c) => c.type);
-		const skills = hasCerts ? skillsFromCertifications(certTypes) : [];
+		const certTypes = certifications?.map((c) => c.type) ?? [];
+		const skills = certTypes.length ? skillsFromCertifications(certTypes) : [];
 
 		res.push({
 			id: `ally-${seed}-${i}`,
@@ -90,8 +119,7 @@ export const generateAllies = (count = ALLY_POOL_SIZE, seed = ALLY_SEED): Ally[]
 			skills,
 			coords: tupleFromCoord(coord),
 			credentialScore: Math.floor(rng() * 35) + 55,
-			certifications: hasCerts ? certifications : undefined,
-			pictureUrl: pickRandomPicture(rng),
+			certifications,
 		});
 	}
 
