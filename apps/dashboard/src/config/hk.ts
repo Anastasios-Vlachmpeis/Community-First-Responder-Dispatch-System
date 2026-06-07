@@ -5,6 +5,6 @@ export const HK_BOUNDS = {
 	maxLat: 22.55,
 } as const;
 
-export const RESPONDER_MAX_RADIUS_KM = 15;
+export const RESPONDER_MAX_RADIUS_KM = 10;
 export const TOP_ALLY_COUNT = 10;
 export const DEMO_TIME_SCALE = 1;

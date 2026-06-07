@@ -37,7 +37,12 @@ import type {
 	RouteData,
 	ServiceType,
 } from "~/domain/types";
-import { countRankedAllies, rankAllies, type RankedAlly } from "~/features/recommender/rankAllies";
+import {
+	countRankedAllies,
+	rankAllies,
+	routeFetchCandidates,
+	type RankedAlly,
+} from "~/features/recommender/rankAllies";
 import { coordFromTuple, tupleFromCoord } from "~/lib/geo";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -1588,7 +1593,7 @@ const AllyPanel = ({
 
 				{rankedAllies.length === 0 ? (
 					<div style={{ color: Z.muted, fontSize: 12, padding: "8px 4px", lineHeight: 1.5 }}>
-						No allies with matching skills nearby
+						No allies within 10 km walking distance
 					</div>
 				) : (
 					rankedAllies.map((ranked) => (
@@ -1777,6 +1782,7 @@ export const SoteriaMap = () => {
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [activeAllyId, setActiveAllyId] = useState<string | null>(null);
 	const [allyRoutes, setAllyRoutes] = useState<Record<string, RouteData>>({});
+	const [rankedAllies, setRankedAllies] = useState<RankedAlly[]>([]);
 	const [serviceRoutes, setServiceRoutes] = useState<Record<string, RouteData>>({});
 	const [serviceProgress, setServiceProgress] = useState<Record<string, number>>({});
 	const [, setTick] = useState(0);
@@ -1804,11 +1810,6 @@ export const SoteriaMap = () => {
 		() => incidents.find((i) => i.id === selectedId) ?? null,
 		[incidents, selectedId],
 	);
-
-	const rankedAllies = useMemo(() => {
-		if (!selectedIncident) return [];
-		return rankAllies(selectedIncident, allyPool);
-	}, [selectedIncident, allyPool]);
 
 	const topAllies = useMemo(() => rankedAllies.map((r) => r.ally), [rankedAllies]);
 
@@ -1840,6 +1841,7 @@ export const SoteriaMap = () => {
 		selectedIdRef.current = selectedId;
 		setAllyRoutes({});
 		setServiceRoutes({});
+		setRankedAllies([]);
 
 		if (!selectedId) {
 			setServiceProgress({});
@@ -1856,21 +1858,44 @@ export const SoteriaMap = () => {
 		);
 
 		const token = import.meta.env.VITE_MAPBOX_TOKEN as string;
-		const ranked = rankAllies(incident, allyPool);
+		setRankedAllies(rankAllies(incident, allyPool));
 
-		for (const { ally } of ranked) {
+		const pathKmByAllyId: Record<string, number> = {};
+		let pending = 0;
+
+		const applyPathRanking = () => {
+			if (selectedIdRef.current !== selectedId) return;
+			const ranked = rankAllies(incident, allyPool, pathKmByAllyId);
+			setRankedAllies(ranked);
+			const routes: Record<string, RouteData> = {};
+			for (const { ally } of ranked) {
+				const key = routeKey(ally.coords, incident.coords, "walking");
+				const cached = routeCache.get(key);
+				if (cached) routes[ally.id] = cached;
+			}
+			setAllyRoutes(routes);
+		};
+
+		for (const ally of routeFetchCandidates(incident, allyPool)) {
 			const key = routeKey(ally.coords, incident.coords, "walking");
 			const cached = routeCache.get(key);
 			if (cached) {
-				setAllyRoutes((prev) => ({ ...prev, [ally.id]: cached }));
+				pathKmByAllyId[ally.id] = cached.distanceM / 1000;
 				continue;
 			}
+			pending++;
 			fetchRoute(ally.coords, incident.coords, "walking", token).then((data) => {
-				if (!data || selectedIdRef.current !== selectedId) return;
+				pending--;
+				if (!data || selectedIdRef.current !== selectedId) {
+					if (pending === 0) applyPathRanking();
+					return;
+				}
 				routeCache.set(key, data);
-				setAllyRoutes((prev) => ({ ...prev, [ally.id]: data }));
+				pathKmByAllyId[ally.id] = data.distanceM / 1000;
+				if (pending === 0) applyPathRanking();
 			});
 		}
+		if (pending === 0) applyPathRanking();
 
 		for (const svc of incident.emergencyServices) {
 			resolveServiceRoute(svc, incident.coords, token).then((data) => {
