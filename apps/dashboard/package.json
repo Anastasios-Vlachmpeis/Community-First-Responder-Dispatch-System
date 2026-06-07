@@ -10,8 +10,11 @@
 		"typecheck": "tsc"
 	},
 	"dependencies": {
+		"lucide-react": "^1.17.0",
+		"mapbox-gl": "^3.24.0",
 		"react": "^19.2.7",
-		"react-dom": "^19.2.7"
+		"react-dom": "^19.2.7",
+		"react-map-gl": "^8.1.1"
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "^4.3.0",
