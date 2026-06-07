@@ -14,6 +14,7 @@ import {
 import type { MapRef } from "react-map-gl/mapbox";
 import { Layer, Map as MapGL, Marker, Source, useMap } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { MAP_MAX_BOUNDS } from "~/config/hk";
 import { getAllyPool } from "~/data/allies";
 import {
 	computeRemainingEtaMinutes,
@@ -134,7 +135,7 @@ const AllyResponseButtons = ({
 				fontFamily: Z.font,
 			}}
 		>
-			Accepted
+			Will Help
 		</button>
 		<button
 			type="button"
@@ -2332,8 +2333,11 @@ export const SoteriaMap = () => {
 							mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
 							mapStyle="mapbox://styles/mapbox/dark-v11"
 							style={{ width: "100%", height: "100%" }}
+							maxBounds={MAP_MAX_BOUNDS}
+							minZoom={8}
 						initialViewState={{ longitude: 114.175, latitude: 22.29, zoom: 10, pitch: 0, bearing: 0 }}
 						onLoad={() => {
+							mapRef.current?.getMap().setMaxBounds(MAP_MAX_BOUNDS);
 							mapRef.current?.flyTo({
 								center: [114.175, 22.295],
 								zoom: 12.5,
