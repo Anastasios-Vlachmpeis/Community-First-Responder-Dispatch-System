@@ -925,28 +925,42 @@ const IncidentMarker = ({
 	incident,
 	selected,
 	dimmed,
+	interactive,
 	onClick,
 }: {
 	incident: Incident;
 	selected: boolean;
 	dimmed: boolean;
+	interactive: boolean;
 	onClick: () => void;
 }) => {
 	const typeColor = TYPE_COLOR[incident.type];
 	const statusColor = STATUS_COLOR[incident.status];
 	const pulseDuration = STATUS_PULSE[incident.status];
 	const showPulse = pulseDuration !== "none" && !incident.handled;
-	const opacity = incident.handled ? (selected ? 1 : 0.1) : dimmed ? 0.35 : 1;
+	// keep the selected incident clickable so its panel can still be toggled closed
+	const clickable = interactive || selected;
+	const opacity = selected
+		? 1
+		: incident.handled
+			? 0.1
+			: !interactive
+				? 0.3
+				: dimmed
+					? 0.35
+					: 1;
 	return (
 		<Marker longitude={incident.coords[0]} latitude={incident.coords[1]} anchor="center">
 			<button
 				type="button"
-				onClick={onClick}
+				onClick={clickable ? onClick : undefined}
+				disabled={!clickable}
 				style={{
 					background: "none",
 					border: "none",
 					padding: 0,
-					cursor: "pointer",
+					cursor: clickable ? "pointer" : "default",
+					pointerEvents: clickable ? "auto" : "none",
 					width: 54,
 					height: 54,
 					display: "flex",
@@ -1293,6 +1307,15 @@ const walkEtaMinutes = (distanceM: number) => (distanceM / 1000 / WALK_KMH) * 60
 const allServicesArrived = (incident: Incident, now = Date.now()) =>
 	incident.emergencyServices.length > 0 &&
 	incident.emergencyServices.every((svc) => computeServiceProgress(svc, now) >= 1);
+
+// "closed" = manually marked done, or every responding vehicle has arrived
+const isIncidentClosed = (incident: Incident, now = Date.now()) =>
+	incident.handled || allServicesArrived(incident, now);
+
+// Only incidents pulled up via the Fetch button (operator source) are clickable, and only
+// while still open. Seed/CAD incidents and closed incidents are greyed out and not selectable.
+const isIncidentInteractive = (incident: Incident, now = Date.now()) =>
+	incident.source === "operator" && !isIncidentClosed(incident, now);
 
 type MapPopupAnchor =
 	| "center"
@@ -1982,10 +2005,12 @@ export const SoteriaMap = () => {
 				startPanelClose();
 				return;
 			}
+			const incident = incidents.find((i) => i.id === id);
+			if (!incident || !isIncidentInteractive(incident)) return;
 			setPanelClosing(false);
 			setSelectedId(id);
 		},
-		[selectedId, startPanelClose],
+		[selectedId, startPanelClose, incidents],
 	);
 
 	const detailOpen = !!selectedIncident && !panelClosing;
@@ -2169,6 +2194,7 @@ export const SoteriaMap = () => {
 								incident={inc}
 								selected={inc.id === selectedId}
 								dimmed={!!selectedId && inc.id !== selectedId}
+								interactive={isIncidentInteractive(inc)}
 								onClick={() => handleSelect(inc.id)}
 							/>
 						))}
