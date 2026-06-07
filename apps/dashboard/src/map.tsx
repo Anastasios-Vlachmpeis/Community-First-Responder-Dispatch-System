@@ -13,6 +13,7 @@ import {
 import type { MapRef } from "react-map-gl/mapbox";
 import { Layer, Map as MapGL, Marker, Source, useMap } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { DIAL_PHONE_NUMBER } from "~/config/hk";
 import { getAllyPool } from "~/data/allies";
 import {
 	computeRemainingEtaMinutes,
@@ -449,18 +450,11 @@ const AppHeader = ({ onAddIncident }: { onAddIncident: () => void }) => (
 			zIndex: 20,
 		}}
 	>
-		<span
-			style={{
-				fontFamily: Z.fontHead,
-				fontSize: 14,
-				fontWeight: 400,
-				color: Z.text,
-				letterSpacing: "0.18em",
-				textTransform: "uppercase",
-			}}
-		>
-			Soteria
-		</span>
+		<img
+			src="/logo.jpeg"
+			alt="Soteria"
+			style={{ height: 20, width: "auto", display: "block" }}
+		/>
 
 		<div
 			style={{
@@ -1426,7 +1420,7 @@ const AllyMapPopup = ({
 				</ul>
 			)}
 			<a
-				href={`tel:${ally.phone}`}
+				href={`tel:${DIAL_PHONE_NUMBER}`}
 				style={{
 					display: "flex",
 					alignItems: "center",
@@ -1768,7 +1762,7 @@ const AllyResponderCard = ({
 					</div>
 				</div>
 				<a
-					href={`tel:${ally.phone}`}
+					href={`tel:${DIAL_PHONE_NUMBER}`}
 					onClick={(e) => e.stopPropagation()}
 					style={{
 						width: 40,
