@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
 	Cross,
 	Download,
@@ -6,6 +6,7 @@ import {
 	Footprints,
 	MapPin,
 	Phone,
+	PhoneOff,
 	Shield,
 	Star,
 	User,
@@ -13,7 +14,6 @@ import {
 import type { MapRef } from "react-map-gl/mapbox";
 import { Layer, Map as MapGL, Marker, Source, useMap } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { DIAL_PHONE_NUMBER } from "~/config/hk";
 import { getAllyPool } from "~/data/allies";
 import {
 	computeRemainingEtaMinutes,
@@ -70,6 +70,38 @@ const Z = {
 const ICON_OPACITY = 0.93;
 const PANEL_CLOSE_MS = 280;
 const PANEL_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+const MOCK_RING_MS_MIN = 2400;
+const MOCK_RING_MS_MAX = 3600;
+
+type CallPhase = "ready" | "calling" | "in-call" | "wrap-up";
+
+const mockRingMs = (allyId: string): number => {
+	let h = 0;
+	for (const c of allyId) h = (h * 31 + c.charCodeAt(0)) | 0;
+	const base = MOCK_RING_MS_MIN + (Math.abs(h) % (MOCK_RING_MS_MAX - MOCK_RING_MS_MIN + 1));
+	const jitter = Math.floor(Math.random() * 500) - 250;
+	return Math.max(MOCK_RING_MS_MIN, Math.min(MOCK_RING_MS_MAX, base + jitter));
+};
+
+const formatPhoneDisplay = (raw: string): string => {
+	const digits = raw.replace(/\D/g, "");
+	if (digits.startsWith("852") && digits.length === 11)
+		return `+852 ${digits.slice(3, 7)} ${digits.slice(7)}`;
+	return raw;
+};
+
+const mockDialAlly = (signal: AbortSignal, ringMs: number): Promise<void> =>
+	new Promise((resolve, reject) => {
+		if (signal.aborted) {
+			reject(new DOMException("aborted", "AbortError"));
+			return;
+		}
+		const id = setTimeout(resolve, ringMs);
+		signal.addEventListener("abort", () => {
+			clearTimeout(id);
+			reject(new DOMException("aborted", "AbortError"));
+		});
+	});
 
 const allyResponseCode = (status?: AllyResponseStatus): number =>
 	status === "accepted" ? 1 : status === "declined" ? 2 : 0;
@@ -1335,22 +1367,132 @@ const allyPopupPlacement = (
 		? { anchor: "bottom", offset: [0, -POPUP_GAP] } // incident is lower → card above the star
 		: { anchor: "top", offset: [0, POPUP_GAP] }; // incident is higher → card below the star
 
-const AllyMapPopup = ({
+const AllyCallDock = ({
 	ally,
-	incidentCoords,
-	matchedCerts,
+	phase,
+	callStartedAt,
 	response,
-	walkEtaMin,
+	onEndCall,
 	onAccept,
 	onDecline,
 }: {
 	ally: Ally;
-	incidentCoords: [number, number];
-	matchedCerts: MatchedCert[];
+	phase: Exclude<CallPhase, "ready">;
+	callStartedAt: number | null;
 	response?: AllyResponseStatus;
-	walkEtaMin: number | null;
+	onEndCall: () => void;
 	onAccept: () => void;
 	onDecline: () => void;
+}) => {
+	const cardStyle: CSSProperties = {
+		background: Z.cardBg,
+		border: `1px solid ${Z.border}`,
+		borderRadius: Z.radius,
+		padding: "16px 18px",
+		width: "100%",
+		pointerEvents: "auto",
+		animation: "slideInUp 0.18s ease-out",
+		boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+		fontFamily: Z.font,
+	};
+
+	if (phase === "calling") {
+		return (
+			<div style={cardStyle}>
+				<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+					<span
+						style={{
+							width: 6,
+							height: 6,
+							borderRadius: "50%",
+							background: Z.green,
+							animation: "liveBlip 1.2s ease infinite",
+						}}
+					/>
+					<span style={{ color: Z.text, fontSize: 13, fontWeight: 600 }}>Calling…</span>
+				</div>
+				<div style={{ color: Z.text, fontSize: 15, fontWeight: 400 }}>{ally.name}</div>
+				<div style={{ color: Z.muted, fontSize: 11, marginTop: 4 }}>{formatPhoneDisplay(ally.phone)}</div>
+			</div>
+		);
+	}
+
+	if (phase === "in-call") {
+		return (
+			<div style={{ ...cardStyle, borderColor: `${Z.green}44` }}>
+				<div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+					<div style={{ flex: 1, minWidth: 0 }}>
+						<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+							<span
+								style={{
+									width: 6,
+									height: 6,
+									borderRadius: "50%",
+									background: Z.green,
+									animation: "liveBlip 1.2s ease infinite",
+								}}
+							/>
+							<span style={{ color: Z.green, fontSize: 13, fontWeight: 600 }}>In call</span>
+							{callStartedAt && (
+								<span style={{ color: Z.muted, fontSize: 11 }}>· {formatElapsed(callStartedAt)}</span>
+							)}
+						</div>
+						<div style={{ color: Z.text, fontSize: 15, fontWeight: 400 }}>{ally.name}</div>
+						<div style={{ color: Z.muted, fontSize: 11, marginTop: 4 }}>{formatPhoneDisplay(ally.phone)}</div>
+					</div>
+					<button
+						type="button"
+						onClick={onEndCall}
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							background: "rgba(236, 0, 22, 0.12)",
+							color: Z.primary,
+							fontSize: 12,
+							fontWeight: 600,
+							padding: "8px 12px",
+							borderRadius: 8,
+							border: "1px solid rgba(236, 0, 22, 0.25)",
+							cursor: "pointer",
+							flexShrink: 0,
+							fontFamily: Z.font,
+						}}
+					>
+						<PhoneOff size={14} style={{ opacity: ICON_OPACITY }} />
+						End call
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div style={cardStyle}>
+			<div style={{ color: Z.muted, fontSize: 11, marginBottom: 10 }}>How did the call go?</div>
+			<div style={{ color: Z.text, fontSize: 14, fontWeight: 400, marginBottom: 12 }}>
+				{ally.name}
+				<span style={{ color: Z.muted }}> · {formatPhoneDisplay(ally.phone)}</span>
+			</div>
+			<AllyResponseButtons status={response} onAccept={onAccept} onDecline={onDecline} />
+		</div>
+	);
+};
+
+const AllyMapPopup = ({
+	ally,
+	incidentCoords,
+	matchedCerts,
+	walkEtaMin,
+	callBusy,
+	onCall,
+}: {
+	ally: Ally;
+	incidentCoords: [number, number];
+	matchedCerts: MatchedCert[];
+	walkEtaMin: number | null;
+	callBusy: boolean;
+	onCall: () => void;
 }) => {
 	const { current: map } = useMap();
 	const { anchor, offset } = map
@@ -1419,32 +1561,30 @@ const AllyMapPopup = ({
 					))}
 				</ul>
 			)}
-			<a
-				href={`tel:${DIAL_PHONE_NUMBER}`}
+			<button
+				type="button"
+				disabled={callBusy}
+				onClick={onCall}
 				style={{
 					display: "flex",
 					alignItems: "center",
 					justifyContent: "center",
 					gap: 8,
-					background: Z.green,
+					width: "100%",
+					background: callBusy ? "rgba(50, 168, 50, 0.35)" : Z.green,
 					color: "#fff",
 					fontSize: 13,
 					fontWeight: 700,
 					padding: "10px 0",
 					borderRadius: 8,
-					textDecoration: "none",
+					border: "none",
+					cursor: callBusy ? "default" : "pointer",
+					fontFamily: Z.font,
 				}}
 			>
 				<Phone size={14} style={{ opacity: ICON_OPACITY }} />
 				Call
-			</a>
-			<div style={{ marginTop: 8 }}>
-				<AllyResponseButtons
-					status={response}
-					onAccept={onAccept}
-					onDecline={onDecline}
-				/>
-			</div>
+			</button>
 		</div>
 	</Marker>
 	);
@@ -1472,10 +1612,11 @@ const AllyPanel = ({
 	incidentClosed,
 	focusedAllyId,
 	activeAllyId,
+	callBusy,
 	closing,
 	onClose,
 	onFocusAlly,
-	onSetAllyResponse,
+	onCallAlly,
 	onSetHandled,
 }: {
 	incident: Incident;
@@ -1486,10 +1627,11 @@ const AllyPanel = ({
 	incidentClosed: boolean;
 	focusedAllyId: string | null;
 	activeAllyId: string | null;
+	callBusy: boolean;
 	closing: boolean;
 	onClose: () => void;
 	onFocusAlly: (allyId: string) => void;
-	onSetAllyResponse: (allyId: string, status: AllyResponseStatus) => void;
+	onCallAlly: (allyId: string) => void;
 	onSetHandled: (handled: boolean) => void;
 }) => {
 	const typeColor = TYPE_COLOR[incident.type];
@@ -1626,9 +1768,9 @@ const AllyPanel = ({
 							matchedCerts={ranked.matchedCerts}
 							response={incident.allyStatuses[ranked.ally.id]}
 							active={focusedAllyId === ranked.ally.id}
+							callBusy={callBusy}
 							onFocus={() => onFocusAlly(ranked.ally.id)}
-							onAccept={() => onSetAllyResponse(ranked.ally.id, "accepted")}
-							onDecline={() => onSetAllyResponse(ranked.ally.id, "declined")}
+							onCall={() => onCallAlly(ranked.ally.id)}
 						/>
 					))
 				)}
@@ -1670,9 +1812,9 @@ const AllyResponderCard = ({
 	matchedCerts,
 	response,
 	active,
+	callBusy,
 	onFocus,
-	onAccept,
-	onDecline,
+	onCall,
 }: {
 	cardRef?: (el: HTMLDivElement | null) => void;
 	ally: Ally;
@@ -1680,9 +1822,9 @@ const AllyResponderCard = ({
 	matchedCerts: MatchedCert[];
 	response?: AllyResponseStatus;
 	active: boolean;
+	callBusy: boolean;
 	onFocus: () => void;
-	onAccept: () => void;
-	onDecline: () => void;
+	onCall: () => void;
 }) => {
 	const borderColor = !active ? Z.border : response === "accepted" ? `${Z.gold}44` : response === "declined" ? "#333" : Z.border;
 	const nameColor = !active ? Z.text : response === "accepted" ? Z.gold : response === "declined" ? Z.muted : Z.text;
@@ -1761,32 +1903,32 @@ const AllyResponderCard = ({
 								: "Loading route…"}
 					</div>
 				</div>
-				<a
-					href={`tel:${DIAL_PHONE_NUMBER}`}
-					onClick={(e) => e.stopPropagation()}
+				<button
+					type="button"
+					disabled={callBusy}
+					onClick={(e) => {
+						e.stopPropagation();
+						onCall();
+					}}
 					style={{
 						width: 40,
 						height: 40,
 						borderRadius: 8,
-						background: Z.green,
+						background: callBusy ? "rgba(50, 168, 50, 0.35)" : Z.green,
 						color: "#fff",
 						display: "flex",
 						alignItems: "center",
 						justifyContent: "center",
-						textDecoration: "none",
-						boxShadow: `0 2px 8px ${Z.green}40`,
+						border: "none",
+						cursor: callBusy ? "default" : "pointer",
+						boxShadow: callBusy ? "none" : `0 2px 8px ${Z.green}40`,
 						flexShrink: 0,
 					}}
 					aria-label={`Call ${ally.name}`}
 				>
 					<Phone size={16} style={{ opacity: ICON_OPACITY }} />
-				</a>
+				</button>
 			</div>
-			{active && (
-				<div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-					<AllyResponseButtons status={response} onAccept={onAccept} onDecline={onDecline} compact />
-				</div>
-			)}
 		</div>
 	);
 };
@@ -1808,6 +1950,18 @@ export const SoteriaMap = () => {
 	const [serviceRoutes, setServiceRoutes] = useState<Record<string, RouteData>>({});
 	const [serviceProgress, setServiceProgress] = useState<Record<string, number>>({});
 	const [, setTick] = useState(0);
+	const [callPhase, setCallPhase] = useState<CallPhase>("ready");
+	const [callAllyId, setCallAllyId] = useState<string | null>(null);
+	const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
+	const dialAbortRef = useRef<AbortController | null>(null);
+
+	const resetCallFlow = useCallback(() => {
+		dialAbortRef.current?.abort();
+		dialAbortRef.current = null;
+		setCallPhase("ready");
+		setCallAllyId(null);
+		setCallStartedAt(null);
+	}, []);
 
 	useEffect(() => {
 		savePersistedState(incidents);
@@ -1842,6 +1996,10 @@ export const SoteriaMap = () => {
 	);
 
 	useEffect(() => setActiveAllyId(null), [selectedId]);
+
+	useEffect(() => {
+		resetCallFlow();
+	}, [selectedId, resetCallFlow]);
 
 	useEffect(() => {
 		const id = setInterval(() => {
@@ -2024,6 +2182,54 @@ export const SoteriaMap = () => {
 			prev.map((inc) => (inc.id === incidentId ? { ...inc, handled } : inc)),
 		);
 	}, []);
+
+	const callAlly = useMemo(() => {
+		if (!callAllyId) return null;
+		return rankedAllies.find((r) => r.ally.id === callAllyId)?.ally ?? allyPool.find((a) => a.id === callAllyId) ?? null;
+	}, [callAllyId, rankedAllies, allyPool]);
+
+	const callBusy = callPhase !== "ready";
+
+	const handleDial = useCallback(async (allyId: string) => {
+		if (callPhase === "calling" || callPhase === "in-call") return;
+		if (callPhase === "wrap-up") return;
+		dialAbortRef.current?.abort();
+		const ctrl = new AbortController();
+		dialAbortRef.current = ctrl;
+		setCallAllyId(allyId);
+		setActiveAllyId(allyId);
+		setCallStartedAt(null);
+		setCallPhase("calling");
+		try {
+			await mockDialAlly(ctrl.signal, mockRingMs(allyId));
+			if (ctrl.signal.aborted) return;
+			setCallStartedAt(Date.now());
+			setCallPhase("in-call");
+		} catch (err) {
+			if (err instanceof DOMException && err.name === "AbortError") return;
+			resetCallFlow();
+		} finally {
+			if (dialAbortRef.current === ctrl) dialAbortRef.current = null;
+		}
+	}, [callPhase, resetCallFlow]);
+
+	const handleEndCall = useCallback(() => {
+		if (callPhase !== "in-call") return;
+		setCallStartedAt(null);
+		setCallPhase("wrap-up");
+	}, [callPhase]);
+
+	const handleCallAccept = useCallback(() => {
+		if (callPhase !== "wrap-up" || !callAllyId || !selectedId) return;
+		setAllyResponse(selectedId, callAllyId, "accepted");
+		resetCallFlow();
+	}, [callPhase, callAllyId, selectedId, setAllyResponse, resetCallFlow]);
+
+	const handleCallDecline = useCallback(() => {
+		if (callPhase !== "wrap-up" || !callAllyId || !selectedId) return;
+		setAllyResponse(selectedId, callAllyId, "declined");
+		resetCallFlow();
+	}, [callPhase, callAllyId, selectedId, setAllyResponse, resetCallFlow]);
 
 	const addIncident = useCallback(() => {
 		const receivedAt = Date.now();
@@ -2232,14 +2438,13 @@ export const SoteriaMap = () => {
 									ally={activeRanked.ally}
 									incidentCoords={selectedIncident.coords}
 									matchedCerts={activeRanked.matchedCerts}
-									response={selectedIncident.allyStatuses[activeRanked.ally.id]}
 									walkEtaMin={
 										allyRoutes[activeRanked.ally.id]
 											? Math.ceil(walkEtaMinutes(allyRoutes[activeRanked.ally.id].distanceM))
 											: null
 									}
-									onAccept={() => setAllyResponse(selectedIncident.id, activeRanked.ally.id, "accepted")}
-									onDecline={() => setAllyResponse(selectedIncident.id, activeRanked.ally.id, "declined")}
+									callBusy={callBusy}
+									onCall={() => handleDial(activeRanked.ally.id)}
 								/>
 								<AllyMarker
 									ally={activeRanked.ally}
@@ -2251,6 +2456,29 @@ export const SoteriaMap = () => {
 							</>
 						)}
 						</MapGL>
+						{callAlly && callPhase !== "ready" && (
+							<div
+								style={{
+									position: "absolute",
+									bottom: 20,
+									left: "50%",
+									transform: "translateX(-50%)",
+									width: "min(480px, calc(100% - 32px))",
+									zIndex: 25,
+									pointerEvents: "none",
+								}}
+							>
+								<AllyCallDock
+									ally={callAlly}
+									phase={callPhase}
+									callStartedAt={callStartedAt}
+									response={selectedIncident?.allyStatuses[callAlly.id]}
+									onEndCall={handleEndCall}
+									onAccept={handleCallAccept}
+									onDecline={handleCallDecline}
+								/>
+							</div>
+						)}
 						</div>
 					</div>
 				</div>
@@ -2277,10 +2505,11 @@ export const SoteriaMap = () => {
 							incidentClosed={allServicesArrived(selectedIncident)}
 							focusedAllyId={activeRanked?.ally.id ?? null}
 							activeAllyId={activeAllyId}
+							callBusy={callBusy}
 							closing={panelClosing}
 							onClose={startPanelClose}
 							onFocusAlly={setActiveAllyId}
-							onSetAllyResponse={(allyId, status) => setAllyResponse(selectedIncident.id, allyId, status)}
+							onCallAlly={handleDial}
 							onSetHandled={(handled) => setIncidentHandled(selectedIncident.id, handled)}
 						/>
 					)}
