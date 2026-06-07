@@ -1316,14 +1316,36 @@ const RouteLayer = ({
 				}}
 			/>
 			<Layer
+				id="sel-svc-routes-ambulance-base"
+				type="line"
+				filter={["all", ["==", ["get", "routeType"], "service"], ["==", ["get", "svcType"], "ambulance"]]}
+				layout={{ "line-join": "round", "line-cap": "round" }}
+				paint={{
+					"line-color": Z.ambulance,
+					"line-width": 3.5,
+					"line-opacity": 0.95,
+				}}
+			/>
+			<Layer
+				id="sel-svc-routes-ambulance-dash"
+				type="line"
+				filter={["all", ["==", ["get", "routeType"], "service"], ["==", ["get", "svcType"], "ambulance"]]}
+				layout={{ "line-join": "round", "line-cap": "round" }}
+				paint={{
+					"line-color": "#ffffff",
+					"line-width": 3.5,
+					"line-dasharray": [1.5, 1.5],
+					"line-opacity": 0.95,
+				}}
+			/>
+			<Layer
 				id="sel-svc-routes"
 				type="line"
-				filter={["==", ["get", "routeType"], "service"]}
+				filter={["all", ["==", ["get", "routeType"], "service"], ["!=", ["get", "svcType"], "ambulance"]]}
 				layout={{ "line-join": "round", "line-cap": "round" }}
 				paint={{
 					"line-color": [
 						"match", ["get", "svcType"],
-						"ambulance", "#ffffff",
 						"police", Z.secondary,
 						"fire-engine", Z.fire,
 						"#888",
