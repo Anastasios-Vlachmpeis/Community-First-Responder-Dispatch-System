@@ -513,6 +513,12 @@ const AppHeader = ({ onAddIncident }: { onAddIncident: () => void }) => (
 	</header>
 );
 
+const ETA_SVC_TYPE: Record<ServiceType, string> = {
+	ambulance: "Ambulance",
+	police: "Police",
+	"fire-engine": "Fire Department",
+};
+
 const ETA_SVC_ICON: Record<ServiceType, ReactNode> = {
 	ambulance:     <Cross  size={22} color={Z.ambulance} strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
 	police:        <Shield size={22} color={Z.police} strokeWidth={2} style={{ opacity: ICON_OPACITY }} />,
@@ -533,7 +539,6 @@ const FloatingStatusCards = ({ services }: { services: EmergencyService[] }) => 
 			const color = svcColor(svc.type);
 			const etaSec = computeRemainingEtaMinutes(svc) * 60;
 			const etaColor = svc.type === "police" ? Z.police : svc.type === "ambulance" ? Z.ambulance : color;
-			const label = svc.type === "police" ? `Brigade ${svc.callsign}` : `#${svc.callsign}`;
 			return (
 				<div
 					key={svc.id}
@@ -560,23 +565,42 @@ const FloatingStatusCards = ({ services }: { services: EmergencyService[] }) => 
 					>
 						{ETA_SVC_ICON[svc.type]}
 					</div>
-					<div style={{ display: "flex", alignItems: "baseline", gap: 6, flexShrink: 0, fontSize: 19.8 }}>
-						<span style={{ color: Z.text, fontWeight: 400 }}>ETA :</span>
-						<span style={{ color: etaColor, fontWeight: 400, letterSpacing: "-0.02em" }}>
-							{formatEtaDuration(etaSec)}
-						</span>
-					</div>
 					<span
 						style={{
-							marginLeft: "auto",
 							color: Z.text,
 							fontSize: 15,
 							fontWeight: 500,
 							whiteSpace: "nowrap",
+							flexShrink: 0,
 						}}
 					>
-						{label}
+						{ETA_SVC_TYPE[svc.type]}
 					</span>
+					<div
+						style={{
+							marginLeft: "auto",
+							display: "flex",
+							alignItems: "baseline",
+							gap: 0,
+							flexShrink: 0,
+							fontSize: 19.8,
+						}}
+					>
+						<span style={{ color: Z.text, fontWeight: 400, flexShrink: 0 }}>ETA :</span>
+						<span
+							style={{
+								color: etaColor,
+								fontWeight: 400,
+								letterSpacing: "-0.02em",
+								width: "5ch",
+								textAlign: "right",
+								fontVariantNumeric: "tabular-nums",
+								flexShrink: 0,
+							}}
+						>
+							{formatEtaDuration(etaSec)}
+						</span>
+					</div>
 				</div>
 			);
 		})}
