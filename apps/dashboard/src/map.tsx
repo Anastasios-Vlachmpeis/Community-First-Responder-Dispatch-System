@@ -449,6 +449,24 @@ function interpolateRoute(coords: [number, number][], t: number): [number, numbe
 	return coords[coords.length - 1];
 }
 
+const serviceMapPosition = (
+	svc: EmergencyService,
+	incidentCoords: [number, number],
+	serviceRoutes: Record<string, RouteData>,
+	serviceProgress: Record<string, number>,
+): [number, number] => {
+	const route = serviceRoutes[svc.id];
+	const fallback = tupleFromCoord(
+		sanitizeServiceOrigin(
+			coordFromTuple(svc.coords),
+			coordFromTuple(incidentCoords),
+			svc.type,
+		),
+	);
+	if (!route?.coords?.length) return fallback;
+	return interpolateRoute(route.coords, serviceProgress[svc.id] ?? 0);
+};
+
 const buildRadiusGeoJSON = (
 	[lng, lat]: [number, number],
 	radiusKm: number,
@@ -551,7 +569,15 @@ const ETA_SVC_ICON: Record<ServiceType, ReactNode> = {
 	"fire-engine": <Flame  size={22} color={Z.fire} strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
 };
 
-const FloatingStatusCards = ({ services }: { services: EmergencyService[] }) => (
+const FloatingStatusCards = ({
+	services,
+	selectedServiceId,
+	onSelectService,
+}: {
+	services: EmergencyService[];
+	selectedServiceId?: string | null;
+	onSelectService: (serviceId: string) => void;
+}) => (
 	<div
 		style={{
 			display: "flex",
@@ -565,18 +591,25 @@ const FloatingStatusCards = ({ services }: { services: EmergencyService[] }) => 
 			const color = svcColor(svc.type);
 			const etaSec = computeRemainingEtaMinutes(svc) * 60;
 			const etaColor = svc.type === "police" ? Z.police : svc.type === "ambulance" ? Z.ambulance : color;
+			const selected = selectedServiceId === svc.id;
 			return (
-				<div
+				<button
 					key={svc.id}
+					type="button"
+					onClick={() => onSelectService(svc.id)}
 					style={{
 						flex: 1,
 						display: "flex",
 						alignItems: "center",
 						gap: 16,
 						minHeight: 64,
-						background: "#2a2d35",
+						background: selected ? "#323640" : "#2a2d35",
 						borderRadius: 10,
 						padding: "16px 18px",
+						border: `1px solid ${selected ? etaColor + "88" : "transparent"}`,
+						cursor: "pointer",
+						fontFamily: Z.font,
+						textAlign: "left",
 					}}
 				>
 					<div
@@ -627,7 +660,7 @@ const FloatingStatusCards = ({ services }: { services: EmergencyService[] }) => 
 							{formatEtaDuration(etaSec)}
 						</span>
 					</div>
-				</div>
+				</button>
 			);
 		})}
 	</div>
@@ -1186,6 +1219,7 @@ const RouteLayer = ({
 	allyRoutes,
 	services,
 	serviceRoutes,
+	showVehicleRoutes,
 	incident,
 	allyStatuses,
 }: {
@@ -1193,6 +1227,7 @@ const RouteLayer = ({
 	allyRoutes: Record<string, RouteData>;
 	services: EmergencyService[];
 	serviceRoutes: Record<string, RouteData>;
+	showVehicleRoutes: boolean;
 	incident: Incident;
 	allyStatuses: Partial<Record<string, AllyResponseStatus>>;
 }) => {
@@ -1215,20 +1250,22 @@ const RouteLayer = ({
 						},
 					];
 				}),
-				...services.flatMap((svc) => {
-					const coords = serviceRoutes[svc.id]?.coords;
-					if (!coords || coords.length < 2) return [];
-					return [
-						{
-							type: "Feature" as const,
-							geometry: { type: "LineString" as const, coordinates: coords },
-							properties: { routeType: "service", svcType: svc.type },
-						},
-					];
-				}),
+				...(showVehicleRoutes
+					? services.flatMap((svc) => {
+							const coords = serviceRoutes[svc.id]?.coords;
+							if (!coords || coords.length < 2) return [];
+							return [
+								{
+									type: "Feature" as const,
+									geometry: { type: "LineString" as const, coordinates: coords },
+									properties: { routeType: "service", svcType: svc.type },
+								},
+							];
+						})
+					: []),
 			],
 		}),
-		[allies, allyRoutes, services, serviceRoutes],
+		[allies, allyRoutes, services, serviceRoutes, showVehicleRoutes],
 	);
 
 	const allyLineWidth = 2;
@@ -1325,6 +1362,62 @@ const RadiusCircle = ({ coords }: { coords: [number, number] }) => (
 			/>
 		</Source>
 	</>
+);
+
+const VehicleRoutesToggle = ({
+	on,
+	onToggle,
+}: {
+	on: boolean;
+	onToggle: () => void;
+}) => (
+	<button
+		type="button"
+		onClick={onToggle}
+		aria-pressed={on}
+		aria-label={on ? "Hide vehicle routes" : "Show vehicle routes"}
+		style={{
+			display: "flex",
+			alignItems: "center",
+			gap: 8,
+			padding: "7px 11px",
+			background: Z.cardBg,
+			border: `1px solid ${on ? `${Z.secondary}66` : Z.border}`,
+			borderRadius: 8,
+			color: on ? Z.text : Z.muted,
+			fontSize: 11,
+			fontWeight: 600,
+			cursor: "pointer",
+			fontFamily: Z.font,
+			boxShadow: "0 2px 10px rgba(0,0,0,0.35)",
+		}}
+	>
+		<span
+			style={{
+				width: 30,
+				height: 16,
+				borderRadius: 999,
+				background: on ? Z.secondary : "rgba(255,255,255,0.12)",
+				position: "relative",
+				flexShrink: 0,
+				transition: "background 0.2s",
+			}}
+		>
+			<span
+				style={{
+					position: "absolute",
+					top: 2,
+					left: on ? 16 : 2,
+					width: 12,
+					height: 12,
+					borderRadius: "50%",
+					background: "#fff",
+					transition: "left 0.2s",
+				}}
+			/>
+		</span>
+		Vehicle routes
+	</button>
 );
 
 // static on-foot ETA: actual walking-route distance ÷ 8 km/h
@@ -1954,6 +2047,8 @@ export const SoteriaMap = () => {
 	const [callPhase, setCallPhase] = useState<CallPhase>("ready");
 	const [callAllyId, setCallAllyId] = useState<string | null>(null);
 	const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
+	const [focusedServiceId, setFocusedServiceId] = useState<string | null>(null);
+	const [showVehicleRoutes, setShowVehicleRoutes] = useState(false);
 	const dialAbortRef = useRef<AbortController | null>(null);
 
 	const resetCallFlow = useCallback(() => {
@@ -2000,7 +2095,41 @@ export const SoteriaMap = () => {
 
 	useEffect(() => {
 		resetCallFlow();
+		setFocusedServiceId(null);
+		setShowVehicleRoutes(false);
 	}, [selectedId, resetCallFlow]);
+
+	const fitMapToService = useCallback(
+		(serviceId: string) => {
+			if (!selectedIncident) return;
+			const svc = selectedIncident.emergencyServices.find((s) => s.id === serviceId);
+			if (!svc) return;
+			const map = mapRef.current?.getMap();
+			if (!map) return;
+			const [vehLng, vehLat] = serviceMapPosition(
+				svc,
+				selectedIncident.coords,
+				serviceRoutes,
+				serviceProgress,
+			);
+			const [incLng, incLat] = selectedIncident.coords;
+			map.fitBounds(
+				[
+					[Math.min(incLng, vehLng), Math.min(incLat, vehLat)],
+					[Math.max(incLng, vehLng), Math.max(incLat, vehLat)],
+				],
+				{
+					padding: { top: 120, bottom: 60, left: 60, right: 60 },
+					duration: 650,
+					pitch: 52,
+					bearing: -12,
+					maxZoom: 14,
+				},
+			);
+			setFocusedServiceId(serviceId);
+		},
+		[selectedIncident, serviceRoutes, serviceProgress],
+	);
 
 	useEffect(() => {
 		const id = setInterval(() => {
@@ -2311,7 +2440,11 @@ export const SoteriaMap = () => {
 									}}
 								>
 									{selectedIncident && (
-										<FloatingStatusCards services={selectedIncident.emergencyServices} />
+										<FloatingStatusCards
+											services={selectedIncident.emergencyServices}
+											selectedServiceId={focusedServiceId}
+											onSelectService={fitMapToService}
+										/>
 									)}
 								</div>
 							</div>
@@ -2386,6 +2519,7 @@ export const SoteriaMap = () => {
 									allyRoutes={allyRoutes}
 									services={selectedIncident.emergencyServices}
 									serviceRoutes={serviceRoutes}
+									showVehicleRoutes={showVehicleRoutes}
 									incident={selectedIncident}
 									allyStatuses={selectedIncident.allyStatuses}
 								/>
@@ -2422,17 +2556,12 @@ export const SoteriaMap = () => {
 
 						{selectedIncident &&
 							selectedIncident.emergencyServices.map((svc) => {
-								const route = serviceRoutes[svc.id];
-								const fallback = tupleFromCoord(
-									sanitizeServiceOrigin(
-										coordFromTuple(svc.coords),
-										coordFromTuple(selectedIncident.coords),
-										svc.type,
-									),
+								const pos = serviceMapPosition(
+									svc,
+									selectedIncident.coords,
+									serviceRoutes,
+									serviceProgress,
 								);
-								const pos = route?.coords?.length
-									? interpolateRoute(route.coords, serviceProgress[svc.id] ?? 0)
-									: fallback;
 								return <VehicleMarker key={svc.id} svc={svc} pos={pos} />;
 							})}
 
@@ -2460,6 +2589,22 @@ export const SoteriaMap = () => {
 							</>
 						)}
 						</MapGL>
+						{selectedIncident && (
+							<div
+								style={{
+									position: "absolute",
+									top: 12,
+									left: 12,
+									zIndex: 15,
+									pointerEvents: "auto",
+								}}
+							>
+								<VehicleRoutesToggle
+									on={showVehicleRoutes}
+									onToggle={() => setShowVehicleRoutes((v) => !v)}
+								/>
+							</div>
+						)}
 						{callAlly && callPhase !== "ready" && (
 							<div
 								style={{
