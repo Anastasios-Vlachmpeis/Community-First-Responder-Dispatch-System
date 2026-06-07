@@ -67,6 +67,8 @@ const Z = {
 } as const;
 
 const ICON_OPACITY = 0.93;
+const PANEL_CLOSE_MS = 280;
+const PANEL_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
 
 const allyResponseCode = (status?: AllyResponseStatus): number =>
 	status === "accepted" ? 1 : status === "declined" ? 2 : 0;
@@ -1462,6 +1464,7 @@ const AllyPanel = ({
 	incidentClosed,
 	focusedAllyId,
 	activeAllyId,
+	closing,
 	onClose,
 	onFocusAlly,
 	onSetAllyResponse,
@@ -1475,6 +1478,7 @@ const AllyPanel = ({
 	incidentClosed: boolean;
 	focusedAllyId: string | null;
 	activeAllyId: string | null;
+	closing: boolean;
 	onClose: () => void;
 	onFocusAlly: (allyId: string) => void;
 	onSetAllyResponse: (allyId: string, status: AllyResponseStatus) => void;
@@ -1482,36 +1486,26 @@ const AllyPanel = ({
 }) => {
 	const typeColor = TYPE_COLOR[incident.type];
 	const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-	const [closing, setClosing] = useState(false);
-	// reset the exit state if a different incident is opened into this panel
-	useEffect(() => setClosing(false), [incident.id]);
 
 	useEffect(() => {
 		if (!activeAllyId) return;
 		cardRefs.current[activeAllyId]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 	}, [activeAllyId]);
-	const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
-	const startClose = () => {
-		setClosing(true);
-		window.setTimeout(onClose, 280);
-	};
+
 	return (
 		<aside
 			style={{
-				width: "30%",
+				width: "100%",
 				minWidth: 300,
-				maxWidth: 380,
 				height: "100%",
 				background: "transparent",
-				borderLeft: `1px solid ${Z.border}`,
 				display: "flex",
 				flexDirection: "column",
-				flexShrink: 0,
 				fontFamily: Z.font,
-				transform: closing ? "translateX(110%)" : "translateX(0)",
+				transform: closing ? "translateX(12%)" : "translateX(0)",
 				opacity: closing ? 0 : 1,
-				transition: `transform 0.28s ${EASE}, opacity 0.28s ${EASE}`,
-				animation: closing ? undefined : `slideInRight 0.28s ${EASE}`,
+				transition: `transform ${PANEL_CLOSE_MS}ms ${PANEL_EASE}, opacity ${PANEL_CLOSE_MS}ms ${PANEL_EASE}`,
+				animation: closing ? undefined : `slideInRight ${PANEL_CLOSE_MS}ms ${PANEL_EASE}`,
 			}}
 		>
 			<div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
@@ -1534,7 +1528,7 @@ const AllyPanel = ({
 							</span>
 							<button
 								type="button"
-								onClick={startClose}
+								onClick={onClose}
 								style={{
 									background: "none",
 									border: "none",
@@ -1799,6 +1793,7 @@ export const SoteriaMap = () => {
 		mergeIncidents(getSeedIncidents(), loadPersistedState()),
 	);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [panelClosing, setPanelClosing] = useState(false);
 	const [activeAllyId, setActiveAllyId] = useState<string | null>(null);
 	const [allyRoutes, setAllyRoutes] = useState<Record<string, RouteData>>({});
 	const [rankedAllies, setRankedAllies] = useState<RankedAlly[]>([]);
@@ -1981,7 +1976,28 @@ export const SoteriaMap = () => {
 		);
 	}, [activeAllyId, selectedIncident, rankedAllies]);
 
-	const handleSelect = (id: string) => setSelectedId((prev) => (prev === id ? null : id));
+	const startPanelClose = useCallback(() => {
+		if (panelClosing || !selectedId) return;
+		setPanelClosing(true);
+		window.setTimeout(() => {
+			setSelectedId(null);
+			setPanelClosing(false);
+		}, PANEL_CLOSE_MS);
+	}, [panelClosing, selectedId]);
+
+	const handleSelect = useCallback(
+		(id: string) => {
+			if (selectedId === id) {
+				startPanelClose();
+				return;
+			}
+			setPanelClosing(false);
+			setSelectedId(id);
+		},
+		[selectedId, startPanelClose],
+	);
+
+	const detailOpen = !!selectedIncident && !panelClosing;
 
 	const setAllyResponse = useCallback((incidentId: string, allyId: string, status: AllyResponseStatus) => {
 		setIncidents((prev) =>
@@ -2051,6 +2067,7 @@ export const SoteriaMap = () => {
 						justifyContent: "center",
 						padding: 20,
 						background: "transparent",
+						transition: `flex ${PANEL_CLOSE_MS}ms ${PANEL_EASE}`,
 					}}
 				>
 					<div
@@ -2061,9 +2078,27 @@ export const SoteriaMap = () => {
 							flexDirection: "column",
 						}}
 					>
-						{selectedIncident && (
-							<FloatingStatusCards services={selectedIncident.emergencyServices} />
-						)}
+						<div
+							style={{
+								display: "grid",
+								gridTemplateRows: detailOpen ? "1fr" : "0fr",
+								marginBottom: detailOpen ? 12 : 0,
+								transition: `grid-template-rows ${PANEL_CLOSE_MS}ms ${PANEL_EASE}, margin-bottom ${PANEL_CLOSE_MS}ms ${PANEL_EASE}`,
+							}}
+						>
+							<div style={{ overflow: "hidden" }}>
+								<div
+									style={{
+										opacity: detailOpen ? 1 : 0,
+										transition: `opacity ${PANEL_CLOSE_MS}ms ${PANEL_EASE}`,
+									}}
+								>
+									{selectedIncident && (
+										<FloatingStatusCards services={selectedIncident.emergencyServices} />
+									)}
+								</div>
+							</div>
+						</div>
 
 						<div
 							style={{
@@ -2073,6 +2108,7 @@ export const SoteriaMap = () => {
 								borderRadius: 14,
 								overflow: "hidden",
 								boxShadow: "0 4px 24px rgba(0,0,0,0.45)",
+								transition: `flex ${PANEL_CLOSE_MS}ms ${PANEL_EASE}`,
 							}}
 						>
 						<MapGL
@@ -2208,22 +2244,36 @@ export const SoteriaMap = () => {
 					</div>
 				</div>
 
-				{selectedIncident && (
-					<AllyPanel
-						incident={selectedIncident}
-						rankedAllies={rankedAllies}
-						allyRoutes={allyRoutes}
-						serviceRoutes={serviceRoutes}
-						serviceProgress={serviceProgress}
-						incidentClosed={allServicesArrived(selectedIncident)}
-						focusedAllyId={activeRanked?.ally.id ?? null}
-						activeAllyId={activeAllyId}
-						onClose={() => setSelectedId(null)}
-						onFocusAlly={setActiveAllyId}
-						onSetAllyResponse={(allyId, status) => setAllyResponse(selectedIncident.id, allyId, status)}
-						onSetHandled={(handled) => setIncidentHandled(selectedIncident.id, handled)}
-					/>
-				)}
+				<div
+					style={{
+						width: detailOpen ? "30%" : 0,
+						minWidth: detailOpen ? 300 : 0,
+						maxWidth: detailOpen ? 380 : 0,
+						height: "100%",
+						flexShrink: 0,
+						overflow: "hidden",
+						borderLeft: detailOpen ? `1px solid ${Z.border}` : "none",
+						transition: `width ${PANEL_CLOSE_MS}ms ${PANEL_EASE}, min-width ${PANEL_CLOSE_MS}ms ${PANEL_EASE}, max-width ${PANEL_CLOSE_MS}ms ${PANEL_EASE}, border-color ${PANEL_CLOSE_MS}ms ${PANEL_EASE}`,
+					}}
+				>
+					{selectedIncident && (
+						<AllyPanel
+							incident={selectedIncident}
+							rankedAllies={rankedAllies}
+							allyRoutes={allyRoutes}
+							serviceRoutes={serviceRoutes}
+							serviceProgress={serviceProgress}
+							incidentClosed={allServicesArrived(selectedIncident)}
+							focusedAllyId={activeRanked?.ally.id ?? null}
+							activeAllyId={activeAllyId}
+							closing={panelClosing}
+							onClose={startPanelClose}
+							onFocusAlly={setActiveAllyId}
+							onSetAllyResponse={(allyId, status) => setAllyResponse(selectedIncident.id, allyId, status)}
+							onSetHandled={(handled) => setIncidentHandled(selectedIncident.id, handled)}
+						/>
+					)}
+				</div>
 			</div>
 
 			<IncidentSidebar
