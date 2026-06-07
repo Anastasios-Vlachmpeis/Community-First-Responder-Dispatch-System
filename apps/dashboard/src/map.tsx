@@ -11,7 +11,7 @@ import {
 	User,
 } from "lucide-react";
 import type { MapRef } from "react-map-gl/mapbox";
-import { Layer, Map as MapGL, Marker, Source } from "react-map-gl/mapbox";
+import { Layer, Map as MapGL, Marker, Source, useMap } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { getAllyPool } from "~/data/allies";
 import {
@@ -1305,33 +1305,18 @@ type MapPopupAnchor =
 	| "bottom-left"
 	| "bottom-right";
 
-const POPUP_GAP = 140;
+// gap from the star to the card edge; > star radius so the star never touches the card
+const POPUP_GAP = 28;
 
+// Simple rule: the card sits directly above or below the star, on the side away from the
+// incident. Compared in SCREEN space (map.project) so "above/below" is correct under pitch/bearing.
 const allyPopupPlacement = (
-	allyCoords: [number, number],
-	incidentCoords: [number, number],
-): { anchor: MapPopupAnchor; offset: [number, number] } => {
-	const dx = incidentCoords[0] - allyCoords[0];
-	const dy = incidentCoords[1] - allyCoords[1];
-	const dist = Math.hypot(dx, dy);
-
-	if (dist < 1e-9) return { anchor: "left", offset: [POPUP_GAP, 0] };
-
-	const px = -dx / dist;
-	const py = dy / dist;
-
-	if (Math.abs(px) >= Math.abs(py)) {
-		const xOff = px > 0 ? POPUP_GAP : -POPUP_GAP;
-		return px > 0
-			? { anchor: "left", offset: [xOff, 0] }
-			: { anchor: "right", offset: [xOff, 0] };
-	}
-
-	const yOff = py > 0 ? POPUP_GAP : -POPUP_GAP;
-	return py > 0
-		? { anchor: "top", offset: [0, yOff] }
-		: { anchor: "bottom", offset: [0, yOff] };
-};
+	allyPt: { x: number; y: number },
+	incidentPt: { x: number; y: number },
+): { anchor: MapPopupAnchor; offset: [number, number] } =>
+	incidentPt.y > allyPt.y
+		? { anchor: "bottom", offset: [0, -POPUP_GAP] } // incident is lower → card above the star
+		: { anchor: "top", offset: [0, POPUP_GAP] }; // incident is higher → card below the star
 
 const AllyMapPopup = ({
 	ally,
@@ -1350,9 +1335,15 @@ const AllyMapPopup = ({
 	onAccept: () => void;
 	onDecline: () => void;
 }) => {
-	const { anchor, offset } = allyPopupPlacement(ally.coords, incidentCoords);
+	const { current: map } = useMap();
+	const { anchor, offset } = map
+		? allyPopupPlacement(map.project(ally.coords), map.project(incidentCoords))
+		: { anchor: "left" as MapPopupAnchor, offset: [POPUP_GAP, 0] as [number, number] };
 	return (
+	// key on anchor: react-map-gl doesn't reliably re-apply a Marker's anchor after mount,
+	// so when the side flips we remount to keep anchor+offset consistent (no overlap on the star)
 	<Marker
+		key={anchor}
 		longitude={ally.coords[0]}
 		latitude={ally.coords[1]}
 		anchor={anchor}
