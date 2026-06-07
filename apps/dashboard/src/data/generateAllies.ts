@@ -3,12 +3,14 @@ import { CERTIFICATION_TYPES, NEW_CERTIFICATION_TYPES } from "~/domain/certLabel
 import { skillsFromCertifications } from "~/domain/certToSkills";
 import type { Ally, Certification, CertificationType, Coord } from "~/domain/types";
 import { isLandCoord, randomLandCoord, sanitizeToLand, tupleFromCoord } from "~/lib/geo";
+import { mulberry32 } from "~/lib/rng";
 
 export const ALLY_POOL_SIZE = 5000;
 export const ALLY_SEED = 42;
 export const ALLY_EXTRA_UNCREDENTIALLED_SIZE = 2000;
 export const ALLY_EXTRA_SEED = 43;
 const CREDENTIALLED_RATE = 0.3;
+// Share of uncredentialled pool that gets one of the new specialty cert types
 const NON_CREDENTIALLED_NEW_CERT_RATE = 0.22;
 
 const FIRST_NAMES = [
@@ -22,17 +24,6 @@ const LAST_NAMES = [
 ];
 
 const OTHER_CERT_LABELS = ["Community First Aid", "Red Cross Volunteer", "Multilingual Support"];
-
-const mulberry32 = (seed: number) => {
-	let s = seed;
-	return () => {
-		s |= 0;
-		s = (s + 0x6d2b79f5) | 0;
-		let t = Math.imul(s ^ (s >>> 15), 1 | s);
-		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
-};
 
 const pick = <T>(rng: () => number, items: T[]): T =>
 	items[Math.floor(rng() * items.length)] ?? items[0]!;

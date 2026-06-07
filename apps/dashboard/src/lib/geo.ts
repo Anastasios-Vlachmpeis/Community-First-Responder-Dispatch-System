@@ -6,6 +6,7 @@ type Box = { minLat: number; maxLat: number; minLng: number; maxLng: number };
 const inBox = ({ lat, lng }: Coord, box: Box) =>
 	lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng;
 
+// Coarse rectangles for harbour / open water — not real coastline geometry
 const WATER_ZONES: Box[] = [
 	{ minLat: 22.2835, maxLat: 22.2935, minLng: 114.155, maxLng: 114.175 },
 	{ minLat: 22.275, maxLat: 22.288, minLng: 114.128, maxLng: 114.155 },
@@ -27,7 +28,7 @@ export const coordFromTuple = ([lng, lat]: [number, number]): Coord => ({ lat, l
 
 export const tupleFromCoord = ({ lat, lng }: Coord): [number, number] => [lng, lat];
 
-export const isWithinHkBounds = (coord: Coord) =>
+const isWithinHkBounds = (coord: Coord) =>
 	coord.lat >= HK_BOUNDS.minLat &&
 	coord.lat <= HK_BOUNDS.maxLat &&
 	coord.lng >= HK_BOUNDS.minLng &&
@@ -42,6 +43,7 @@ export const isLandCoord = (coord: Coord): boolean => {
 
 export const sanitizeToLand = (coord: Coord): Coord => {
 	if (isLandCoord(coord)) return coord;
+	// Spiral outward until a land cell is found
 	for (let ring = 1; ring <= 50; ring++) {
 		const km = ring * 0.15;
 		for (let i = 0; i < 24; i++) {

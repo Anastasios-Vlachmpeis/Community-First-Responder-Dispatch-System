@@ -56,7 +56,6 @@ const Z = {
 	gold: "#D4AF37",
 	text: "#FFFFFF",
 	muted: "rgba(255, 255, 255, 0.5)",
-	bg: "#1a1d23",
 	cardBg: "#242830",
 	border: "rgba(255, 255, 255, 0.08)",
 	borderSubtle: "rgba(255, 255, 255, 0.05)",
@@ -76,6 +75,7 @@ const MOCK_RING_MS_MAX = 3600;
 
 type CallPhase = "ready" | "calling" | "in-call" | "wrap-up";
 
+// Demo call flow — simulates ring time before showing accept/decline
 const mockRingMs = (allyId: string): number => {
 	let h = 0;
 	for (const c of allyId) h = (h * 31 + c.charCodeAt(0)) | 0;
@@ -111,25 +111,23 @@ const AllyResponseButtons = ({
 	status,
 	onAccept,
 	onDecline,
-	compact,
 }: {
 	status?: AllyResponseStatus;
 	onAccept: () => void;
 	onDecline: () => void;
-	compact?: boolean;
 }) => (
-	<div style={{ display: "flex", gap: compact ? 4 : 6, width: compact ? undefined : "100%" }}>
+	<div style={{ display: "flex", gap: 6, width: "100%" }}>
 		<button
 			type="button"
 			onClick={onAccept}
 			style={{
-				flex: compact ? undefined : 1,
-				padding: compact ? "4px 8px" : "8px 0",
-				borderRadius: compact ? 6 : 8,
+				flex: 1,
+				padding: "8px 0",
+				borderRadius: 8,
 				border: `1px solid ${status === "accepted" ? Z.gold : Z.border}`,
 				background: status === "accepted" ? `${Z.gold}22` : "rgba(255,255,255,0.04)",
 				color: status === "accepted" ? Z.gold : Z.muted,
-				fontSize: compact ? 8 : 11,
+				fontSize: 11,
 				fontWeight: 600,
 				cursor: "pointer",
 				fontFamily: Z.font,
@@ -141,13 +139,13 @@ const AllyResponseButtons = ({
 			type="button"
 			onClick={onDecline}
 			style={{
-				flex: compact ? undefined : 1,
-				padding: compact ? "4px 8px" : "8px 0",
-				borderRadius: compact ? 6 : 8,
+				flex: 1,
+				padding: "8px 0",
+				borderRadius: 8,
 				border: `1px solid ${status === "declined" ? "#555" : Z.border}`,
 				background: status === "declined" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.04)",
 				color: status === "declined" ? Z.text : Z.muted,
-				fontSize: compact ? 8 : 11,
+				fontSize: 11,
 				fontWeight: 600,
 				cursor: "pointer",
 				fontFamily: Z.font,
@@ -219,12 +217,6 @@ const STATUS_PULSE: Record<IncidentStatus, string> = {
 	incoming:   "1.5s",
 	active:     "2.8s",
 	dispatched: "none",
-};
-
-const SVC_ICON: Record<ServiceType, ReactNode> = {
-	ambulance:     <Cross    size={13} color="white" strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
-	police:        <Shield   size={13} color="white" strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
-	"fire-engine": <Flame    size={13} color="white" strokeWidth={2.5} style={{ opacity: ICON_OPACITY }} />,
 };
 
 const SVC_LABEL: Record<ServiceType, string> = {
@@ -328,6 +320,7 @@ function haversineM([lng1, lat1]: [number, number], [lng2, lat2]: [number, numbe
 	return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Mapbox sometimes returns a 2-point straight line when routing fails
 const isValidRouteGeometry = (
 	route: RouteData,
 	from: [number, number],
@@ -681,7 +674,7 @@ const IncidentSidebar = ({
 }) => (
 	<div
 		style={{
-			display: "none",
+			display: "none", // legacy queue panel — kept for layout reference
 			position: "absolute",
 			top: 0,
 			left: 0,
@@ -1220,7 +1213,6 @@ const RouteLayer = ({
 	services,
 	serviceRoutes,
 	showVehicleRoutes,
-	incident,
 	allyStatuses,
 }: {
 	allies: Ally[];
@@ -1228,7 +1220,6 @@ const RouteLayer = ({
 	services: EmergencyService[];
 	serviceRoutes: Record<string, RouteData>;
 	showVehicleRoutes: boolean;
-	incident: Incident;
 	allyStatuses: Partial<Record<string, AllyResponseStatus>>;
 }) => {
 	const data = useMemo(
@@ -1723,8 +1714,6 @@ const AllyPanel = ({
 	incident,
 	rankedAllies,
 	allyRoutes,
-	serviceRoutes: _serviceRoutes,
-	serviceProgress: _serviceProgress,
 	incidentClosed,
 	focusedAllyId,
 	activeAllyId,
@@ -1738,8 +1727,6 @@ const AllyPanel = ({
 	incident: Incident;
 	rankedAllies: RankedAlly[];
 	allyRoutes: Record<string, RouteData>;
-	serviceRoutes: Record<string, RouteData>;
-	serviceProgress: Record<string, number>;
 	incidentClosed: boolean;
 	focusedAllyId: string | null;
 	activeAllyId: string | null;
@@ -2490,28 +2477,28 @@ export const SoteriaMap = () => {
 							style={{ width: "100%", height: "100%" }}
 							maxBounds={MAP_MAX_BOUNDS}
 							minZoom={8}
-						initialViewState={{ longitude: 114.175, latitude: 22.29, zoom: 10, pitch: 0, bearing: 0 }}
-						onLoad={() => {
-							mapRef.current?.getMap().setMaxBounds(MAP_MAX_BOUNDS);
-							mapRef.current?.flyTo({
-								center: [114.175, 22.295],
-								zoom: 12.5,
-								pitch: 38,
-								bearing: -8,
-								duration: 2400,
-								essential: true,
-								curve: 1.2,
-							});
-						}}
-						fog={{
-							color: "#0a0f14",
-							"high-color": "#111827",
-							"horizon-blend": 0.06,
-							"space-color": "#000008",
-							"star-intensity": 0.08,
-							range: [0.5, 8],
-						}}
-					>
+							initialViewState={{ longitude: 114.175, latitude: 22.29, zoom: 10, pitch: 0, bearing: 0 }}
+							onLoad={() => {
+								mapRef.current?.getMap().setMaxBounds(MAP_MAX_BOUNDS);
+								mapRef.current?.flyTo({
+									center: [114.175, 22.295],
+									zoom: 12.5,
+									pitch: 38,
+									bearing: -8,
+									duration: 2400,
+									essential: true,
+									curve: 1.2,
+								});
+							}}
+							fog={{
+								color: "#0a0f14",
+								"high-color": "#111827",
+								"horizon-blend": 0.06,
+								"space-color": "#000008",
+								"star-intensity": 0.08,
+								range: [0.5, 8],
+							}}
+						>
 						<Layer
 							id="3d-buildings"
 							source="composite"
@@ -2542,7 +2529,6 @@ export const SoteriaMap = () => {
 									services={selectedIncident.emergencyServices}
 									serviceRoutes={serviceRoutes}
 									showVehicleRoutes={showVehicleRoutes}
-									incident={selectedIncident}
 									allyStatuses={selectedIncident.allyStatuses}
 								/>
 							</>
@@ -2671,8 +2657,6 @@ export const SoteriaMap = () => {
 							incident={selectedIncident}
 							rankedAllies={rankedAllies}
 							allyRoutes={allyRoutes}
-							serviceRoutes={serviceRoutes}
-							serviceProgress={serviceProgress}
 							incidentClosed={allServicesArrived(selectedIncident)}
 							focusedAllyId={activeRanked?.ally.id ?? null}
 							activeAllyId={activeAllyId}

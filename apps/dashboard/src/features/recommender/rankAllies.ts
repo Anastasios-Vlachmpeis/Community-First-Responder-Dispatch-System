@@ -11,10 +11,10 @@ export type RankedAlly = {
 	matchedCerts: MatchedCert[];
 };
 
-export const ROUTE_FETCH_CANDIDATE_LIMIT = 100;
-export const HAVERSINE_PREFILTER_KM = 12;
+const ROUTE_FETCH_CANDIDATE_LIMIT = 100;
+const HAVERSINE_PREFILTER_KM = 12;
 
-export const allyStraightLineKm = (incident: Incident, ally: Ally): number => {
+const allyStraightLineKm = (incident: Incident, ally: Ally): number => {
 	const [lng, lat] = incident.coords;
 	return haversineKm({ lat: ally.coords[1], lng: ally.coords[0] }, { lat, lng });
 };
@@ -36,6 +36,7 @@ export const rankAllies = (
 	pool: Ally[],
 	pathDistanceKmByAllyId?: Readonly<Record<string, number>>,
 ): RankedAlly[] => {
+	// Once walking routes arrive, drop allies we couldn't route (Mapbox miss / out of range)
 	const pathOnly =
 		pathDistanceKmByAllyId != null && Object.keys(pathDistanceKmByAllyId).length > 0;
 	const scored = pool

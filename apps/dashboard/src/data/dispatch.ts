@@ -7,6 +7,7 @@ import { haversineKm, isLandCoord, sanitizeToLand, tupleFromCoord } from "~/lib/
 const URBAN_KMH = 28;
 const ETA_MIN_MINUTES = 5;
 const ETA_MAX_MINUTES = 65;
+// Cap how far seed incidents appear along their dispatch timeline (demo only)
 const SEED_MAX_PROGRESS = 0.35;
 const MIN_ORIGIN_KM = 2.5;
 const MAX_FIELD_KM = 9;
@@ -23,7 +24,7 @@ let callsignCounter = 0;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-export const clampEtaMinutes = (minutes: number) =>
+const clampEtaMinutes = (minutes: number) =>
 	clamp(minutes, ETA_MIN_MINUTES, ETA_MAX_MINUTES);
 
 const estimateEtaMinutes = (from: Coord, to: Coord) =>
@@ -75,6 +76,7 @@ const fieldOrigin = (incident: Coord): Coord => {
 	return sanitizeToLand(randomInBand());
 };
 
+// Closest station at least MIN_ORIGIN_KM away — keeps vehicles off the incident pin
 const nearestStationBeyond = (incident: Coord, service: ServiceType): Station | null => {
 	let res: Station | null = null;
 	let minDist = Infinity;

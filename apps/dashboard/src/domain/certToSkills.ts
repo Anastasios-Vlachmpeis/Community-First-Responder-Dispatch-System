@@ -1,6 +1,6 @@
 import type { CertificationType, IncidentType } from "~/domain/types";
 
-export const CERT_TO_SKILLS: Record<CertificationType, IncidentType[]> = {
+const CERT_TO_SKILLS: Record<CertificationType, IncidentType[]> = {
 	cpr_aed: ["cardiac-arrest", "choking", "breathing-difficulty", "drowning", "anaphylaxis"],
 	medical_professional: [
 		"cardiac-arrest",

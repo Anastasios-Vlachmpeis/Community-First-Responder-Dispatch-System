@@ -6,6 +6,7 @@ const STORAGE_KEY = "soteria-incidents";
 
 const incidentDisplayId = (id: string) => id.replace(/-/g, "").slice(-4).toUpperCase();
 
+// Legacy or test incidents to strip from localStorage and merged state
 const REMOVED_INCIDENT_DISPLAY_IDS = new Set(["E542", "80F0", "92FF", "A379", "0003", "3E51"]);
 
 const isRemovedIncident = (id: string) => REMOVED_INCIDENT_DISPLAY_IDS.has(incidentDisplayId(id));
@@ -17,6 +18,7 @@ type PersistedState = {
 	overrides: Record<string, Pick<Incident, "allyStatuses" | "handled">>;
 };
 
+// Older saves used contactedAllyIds; map those to accepted allyStatuses
 const migrateAllyStatuses = (inc: PersistedIncident): Partial<Record<string, AllyResponseStatus>> => {
 	const statuses = { ...inc.allyStatuses };
 	if (inc.contactedAllyIds?.length) {
