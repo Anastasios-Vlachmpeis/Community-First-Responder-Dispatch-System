@@ -6,6 +6,8 @@ Emergency response tooling for Hong Kong: an operator dashboard for dispatching 
 
 ### `apps/dashboard` — operator map
 
+<img width="2526" height="1337" alt="Screenshot 2026-06-08 131114" src="https://github.com/user-attachments/assets/b702dfc0-6a3b-4886-943c-6d7839945962" />
+
 Live Mapbox map for emergency operators.
 
 - Incident list with seed data and operator-created incidents
