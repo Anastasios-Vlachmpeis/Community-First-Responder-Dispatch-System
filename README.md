@@ -1,4 +1,4 @@
-# Reach / Soteria
+# Soteria
 
 Emergency response tooling for Hong Kong: an operator dashboard for dispatching incidents and a mobile app for volunteer responders (“allies”).
 
