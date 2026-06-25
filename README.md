@@ -1,6 +1,14 @@
 # Soteria
 
-Emergency response tooling for Hong Kong: an operator dashboard for dispatching incidents and a mobile app for volunteer responders (“allies”).
+Soteria is a community-first emergency response dispatch system for Hong Kong. It combines an operator dashboard for live incident coordination with a mobile app for trained volunteer responders, called “allies,” who can reach nearby emergencies before official units arrive.
+
+The product is built around a simple idea: in dense cities, the first few minutes after an emergency often determine the outcome. Ambulances, police, and fire services remain the backbone of the response, but nearby citizens with verified first-aid, medical, rescue, or safety skills may already be within walking distance. Soteria helps dispatch operators identify those people, understand whether they can genuinely arrive sooner than professional responders, and contact them in a structured, accountable workflow.
+
+For each incident, the dashboard shows the emergency location, the estimated arrival times of official services, and a ranked list of suitable allies. Ranking is based on proximity, travel time, and relevant credentials, so operators can prioritize volunteers who are both close enough and appropriately skilled for the emergency type. The responder app supports registration, phone verification, certification selection, availability status, and document upload, forming the foundation for a trusted community responder network.
+
+## Recognition
+
+Soteria won **2nd place in the Smart City track** at the **EuroTech Federation x Hong Kong Talent Engage Hackathon**. Our team was selected from **1,300+ applicants** to participate in the hackathon.
 
 ## What's included
 
